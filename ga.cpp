@@ -355,11 +355,12 @@ int main(int argc, char **argv)
     GetBestSolution(pool, solution);
 
     solution_found = solution.fitness == (1<<max_bits);
-    if (generation % 100 == 0)
-      printf("Generation[%8d] bad collisions(%d): 0x%llxULL\n", generation, (1<<max_bits)-solution.fitness, solution.magic);
 
     if (solution_found)
       break;
+
+    if (generation % 100 == 0)
+      printf("Generation[%8d] bad collisions(%d): 0x%llxULL\n", generation, (1<<max_bits)-solution.fitness, solution.magic);
 
     SelectParents(pool, parents);
     GenerateOffspring(pool, parents);
