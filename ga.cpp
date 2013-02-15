@@ -14,7 +14,7 @@
 #define NUM_RANDOM 2
 #define CROSSOVER_RATE 0.99f
 #define MUTATION_RATE 0.01f
-#define POPULATION_SIZE 5000
+#define POPULATION_SIZE 500
 #define CHROMO_LENGTH 64
 
 typedef unsigned long long U64;
@@ -286,6 +286,15 @@ void stop(int)
   stopped = true;
 }
 
+void print_and_exit()
+{
+  printf("Usage: magics <square> <target-bits> [is_bishop]\n");
+  printf("       <square> in {0,...,63}\n");
+  printf("       <target-bits> number of bits to look for magics\n");
+  printf("       <is_bishop> in {1,0} bishop or rook\n");
+  exit(EXIT_FAILURE);
+}
+
 int main(int argc, char **argv)
 {
   srand(time(0));
@@ -308,10 +317,15 @@ int main(int argc, char **argv)
       target_bits = atoi(argv[2]);
     break;
     default:
-      printf("Usage: magics <square> <target-bits> [is_bishop]\n");
-      return EXIT_FAILURE;
+      print_and_exit();
     break;
   }
+  
+  if (square < 0 || square > 63)
+    print_and_exit();
+  if (target_bits > max_bits)
+    print_and_exit();
+  
 
   mask = is_bishop ? bmask(square) : rmask(square);
   max_bits = count_1s(mask);
