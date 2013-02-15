@@ -10,10 +10,8 @@
 #include <csignal>
 #include <cstdio>
 
-#define NUM_PARENTS 10
-#define NUM_RANDOM 2
-#define CROSSOVER_RATE 0.99f
-#define MUTATION_RATE 0.1f
+#define NUM_PARENTS 20
+#define NUM_RANDOM 10
 #define POPULATION_SIZE 1000
 #define CHROMO_LENGTH 64
 
@@ -269,18 +267,16 @@ int GetFitness(const U64 chromosome)
   used_list.assign(used_list.size(), C64(0));
   int bad_collisions = 0;
   int index;
-  U64 attack;
 
   for (int i = 0; i < (1 << max_bits); i++)
   {
-    attack = attack_list[i];
     index = transform(block_list[i], chromosome, target_bits);
 
     if (used_list[index] == C64(0))
-      used_list[index] = attack;
+      used_list[index] = attack_list[i];
     else
-      if (used_list[index] != attack)
-        bad_collisions++;
+    if (used_list[index] != attack_list[i])
+      bad_collisions++;
   }
 
   return (1 << max_bits) - bad_collisions;
@@ -291,11 +287,7 @@ void InitializePopulation(std::vector<Chromosome> &pool)
   for (int i = 0; i < POPULATION_SIZE; i++)
   {
     pool[i].magic = R64Few();
-
-    if (count_1s((mask * pool[i].magic) & 0xFF00000000000000ULL) < min_bits)
-      i--;
-    else
-      pool[i].fitness = GetFitness(pool[i].magic);
+    pool[i].fitness = GetFitness(pool[i].magic);
   }
 }
 
@@ -320,17 +312,13 @@ void SelectParents(const std::vector<Chromosome> &pool, std::vector<Chromosome> 
   for (int i = NUM_PARENTS - NUM_RANDOM; i < NUM_PARENTS; i++)
   {
     parents[i].magic = R64Few();
-
-    if (count_1s((mask * parents[i].magic) & 0xFF00000000000000ULL) < min_bits)
-      i--;
-    else
-      parents[i].fitness = GetFitness(parents[i].magic);
+    parents[i].fitness = GetFitness(parents[i].magic);
   }
 }
 
 void GenerateOffspring(std::vector<Chromosome> &pool, const std::vector<Chromosome> &parents)
 {
-  // Put best parents in new pool
+  // Put first <n> best parents in new pool
   for (int i = 0; i < NUM_PARENTS - NUM_RANDOM; i++)
     pool[i] = parents[i];
 
@@ -342,17 +330,13 @@ void GenerateOffspring(std::vector<Chromosome> &pool, const std::vector<Chromoso
     const Chromosome &mother = parents[RAND_INT(0, NUM_PARENTS - 1)];
 
     // Mate between father and mother
-    if (RAND_FLT() < CROSSOVER_RATE)
-    {
-      int crossover = RAND_INT(0, CHROMO_LENGTH - 1);
-      U64 father_side = (C64(1) << crossover) - 1;
-      child = (father.magic & father_side) | (mother.magic&~father_side);
-    }
+    int crossover = RAND_INT(1, CHROMO_LENGTH - 1);
+    U64 father_side = (C64(1) << crossover) - 1;
+    child = (father.magic & father_side) | (mother.magic & ~father_side);
 
     // Create possible mutations
-    for (int j = 0; j < CHROMO_LENGTH; j++)
-      if (RAND_FLT() < MUTATION_RATE)
-        child.magic ^= (C64(1) << j);
+    U64 mutations = R64Few() & R64Few();
+    child.magic ^= mutations;
 
     child.fitness = GetFitness(child.magic);
   }
@@ -426,8 +410,7 @@ int main(int argc, char **argv)
 
   int generation = 0;
   stopped = false;
-  printf("Generating magic for '%s' using %d/%d bits\n", is_bishop ? "bishop" : "rook", target_bits, max_bits);
-  print(is_bishop ? batt(square, C64(0)) : ratt(square, C64(0)));
+  fprintf(stdout, "Generating magic for '%s' using %d/%d bits\n", is_bishop ? "bishop" : "rook", target_bits, max_bits);
   bool solution_found = false;
 
   while (!stopped)
@@ -440,7 +423,7 @@ int main(int argc, char **argv)
       break;
 
     if (generation % 100 == 0)
-      printf("Generation[%8d] bad collisions(%d): 0x%llxULL\n", generation, (1 << max_bits) - solution.fitness, solution.magic);
+      fprintf(stdout, "Generation[%8d] bad collisions(%d): 0x%llxULL\n", generation, (1 << max_bits) - solution.fitness, solution.magic);
 
     SelectParents(pool, parents);
     GenerateOffspring(pool, parents);
@@ -448,10 +431,10 @@ int main(int argc, char **argv)
   }
 
   if (solution_found)
-    printf("Solution after %d generations: 0x%llxULL for '%s' square %d %d/%d bits.\n",
+    fprintf(stderr, "%d\t0x%llxULL\t%s\t %d\t%d\t%d\n",
            generation, solution.magic, is_bishop ? "bishop" : "rook", square, target_bits, max_bits);
   else
-    printf("No solution found after %d generations\n", generation);
+    fprintf(stdout, "No solution found after %d generations\n", generation);
 
   return EXIT_SUCCESS;
 }
