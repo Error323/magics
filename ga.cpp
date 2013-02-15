@@ -300,7 +300,7 @@ int main(int argc, char **argv)
   srand(time(0));
   signal(SIGINT, stop);
 
-  min_bits = 7;
+  min_bits = 5;
   target_bits = 11;
   square = 0;
   is_bishop = 0;
@@ -320,15 +320,14 @@ int main(int argc, char **argv)
       print_and_exit();
     break;
   }
+
+  mask = is_bishop ? bmask(square) : rmask(square);
+  max_bits = count_1s(mask);
   
   if (square < 0 || square > 63)
     print_and_exit();
   if (target_bits > max_bits)
     print_and_exit();
-  
-
-  mask = is_bishop ? bmask(square) : rmask(square);
-  max_bits = count_1s(mask);
 
   attack_list.resize(1<<max_bits);
   block_list.resize(1<<max_bits);
