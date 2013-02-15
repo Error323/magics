@@ -14,7 +14,7 @@
 #define NUM_RANDOM 2
 #define CROSSOVER_RATE 0.99f
 #define MUTATION_RATE 0.1f
-#define POPULATION_SIZE 10000
+#define POPULATION_SIZE 1000
 #define CHROMO_LENGTH 64
 
 typedef unsigned long long U64;
