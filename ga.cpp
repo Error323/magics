@@ -14,7 +14,7 @@
 #define NUM_RANDOM 2
 #define CROSSOVER_RATE 0.99f
 #define MUTATION_RATE 0.01f
-#define POPULATION_SIZE 1000
+#define POPULATION_SIZE 5000
 #define CHROMO_LENGTH 64
 
 typedef unsigned long long U64;
@@ -34,6 +34,28 @@ int min_bits;
 std::vector<U64> attack_list;
 std::vector<U64> block_list;
 std::vector<U64> used_list;
+
+class Chromosome
+{
+public:
+  Chromosome(): magic(C64(0)), fitness(-1) {}
+  Chromosome(U64 m): magic(m), fitness(-1) {}
+  Chromosome(U64 m, int f): magic(m), fitness(f) {}
+  Chromosome(const Chromosome &c): magic(c.magic), fitness(c.fitness){}
+
+  Chromosome & operator=(const Chromosome &c)
+  {
+    if (this != &c)
+    {
+      magic = c.magic;
+      fitness = c.fitness;
+    }
+    return *this;
+  }
+
+  U64 magic;
+  int fitness;
+};
 
 const int bit_table[64] = {
   63, 30, 3 , 32, 25, 41, 22, 33, 
@@ -167,16 +189,6 @@ int transform(U64 b, U64 magic, int bits)
   return (int)((b * magic) >> (64 - bits));
 }
 
-void InitializePopulation(std::vector<U64> &pool)
-{
-  for (int i = 0; i < POPULATION_SIZE; i++)
-  {
-    pool[i] = R64Few();
-    if(count_1s((mask * pool[i]) & 0xFF00000000000000ULL) < min_bits)
-      i--;
-  }
-}
-
 int GetFitness(const U64 chromosome)
 {
   used_list.assign(used_list.size(), C64(0));
@@ -198,18 +210,30 @@ int GetFitness(const U64 chromosome)
   return (1<<max_bits) - bad_collisions;
 }
 
-bool SortChromosome(const U64 &a, const U64 &b)
+void InitializePopulation(std::vector<Chromosome> &pool)
 {
-  return GetFitness(a) > GetFitness(b);
+  for (int i = 0; i < POPULATION_SIZE; i++)
+  {
+    pool[i].magic = R64Few();
+    if(count_1s((mask * pool[i].magic) & 0xFF00000000000000ULL) < min_bits)
+      i--;
+    else
+      pool[i].fitness = GetFitness(pool[i].magic);
+  }
 }
 
-void GetBestSolution(std::vector<U64> &pool, U64 &solution)
+bool ChromosomeSorter(const Chromosome &a, const Chromosome &b)
 {
-  std::sort(pool.begin(), pool.end(), SortChromosome);
+  return a.fitness > b.fitness;
+}
+
+void GetBestSolution(std::vector<Chromosome> &pool, Chromosome &solution)
+{
+  std::sort(pool.begin(), pool.end(), ChromosomeSorter);
   solution = pool[0];
 }
 
-void SelectParents(const std::vector<U64> &pool, std::vector<U64> &parents)
+void SelectParents(const std::vector<Chromosome> &pool, std::vector<Chromosome> &parents)
 {
   //NOTE: Assuming sorted pool - descending order
   for (int i = 0; i < NUM_PARENTS-NUM_RANDOM; i++)
@@ -218,13 +242,15 @@ void SelectParents(const std::vector<U64> &pool, std::vector<U64> &parents)
   // Add some random parents
   for (int i = NUM_PARENTS-NUM_RANDOM; i < NUM_PARENTS; i++)
   {
-    parents[i] = R64Few();
-    if(count_1s((mask * parents[i]) & 0xFF00000000000000ULL) < min_bits)
+    parents[i].magic = R64Few();
+    if(count_1s((mask * parents[i].magic) & 0xFF00000000000000ULL) < min_bits)
       i--;
+    else
+      parents[i].fitness = GetFitness(parents[i].magic);
   }
 }
 
-void GenerateOffspring(std::vector<U64> &pool, const std::vector<U64> &parents)
+void GenerateOffspring(std::vector<Chromosome> &pool, const std::vector<Chromosome> &parents)
 {
   // Put best parents in new pool
   for (int i = 0; i < NUM_PARENTS-NUM_RANDOM; i++)
@@ -233,22 +259,24 @@ void GenerateOffspring(std::vector<U64> &pool, const std::vector<U64> &parents)
   // Create offspring
   for (int i = NUM_PARENTS-NUM_RANDOM; i < POPULATION_SIZE; i++)
   {
-    U64 &child = pool[i];
-    const U64 &father = parents[RAND_INT(0, NUM_PARENTS-1)];
-    const U64 &mother = parents[RAND_INT(0, NUM_PARENTS-1)];
+    Chromosome &child = pool[i];
+    const Chromosome &father = parents[RAND_INT(0, NUM_PARENTS-1)];
+    const Chromosome &mother = parents[RAND_INT(0, NUM_PARENTS-1)];
 
     // Mate between father and mother
     if (RAND_FLT() < CROSSOVER_RATE)
     {
       int crossover = RAND_INT(0, CHROMO_LENGTH-1);
       U64 father_side = (C64(1) << crossover) - 1;
-      child = (father&father_side) | (mother&~father_side);
+      child = (father.magic&father_side) | (mother.magic&~father_side);
     }
 
     // Create possible mutations
     for (int j = 0; j < CHROMO_LENGTH; j++)
       if (RAND_FLT() < MUTATION_RATE)
-        child ^= (C64(1) << j);
+        child.magic ^= (C64(1) << j);
+
+    child.fitness = GetFitness(child.magic);
   }
 }
 
@@ -298,27 +326,26 @@ int main(int argc, char **argv)
     attack_list[i] = is_bishop ? batt(square, block_list[i]) : ratt(square, block_list[i]);
   }
 
-  std::vector<U64> pool(POPULATION_SIZE);
-  std::vector<U64> parents(NUM_PARENTS);
-  U64 solution = C64(0);
+  std::vector<Chromosome> pool(POPULATION_SIZE);
+  std::vector<Chromosome> parents(NUM_PARENTS);
+  Chromosome solution;
   InitializePopulation(pool);
 
-  int generation = 0, fitness;
+  int generation = 0;
   stopped = false;
   printf("Generating magic for '%s' using %d/%d bits\n", is_bishop?"bishop":"rook", target_bits, max_bits);
-  print(C64(1) << square);
+  print(mask);
   while (!stopped)
   {
     GetBestSolution(pool, solution);
-    fitness = GetFitness(solution);
 
-    if (generation % 100 == 0 || fitness == (1<<max_bits))
-      printf("Generation[%4d] bad collisions(%d): 0x%llxULL\n", generation, (1<<max_bits)-fitness, solution);
+    if (generation % 100 == 0 || solution.fitness == (1<<max_bits))
+      printf("Generation[%8d] bad collisions(%d): 0x%llxULL\n", generation, (1<<max_bits)-solution.fitness, solution.magic);
 
-    if (fitness == (1<<max_bits))
+    if (solution.fitness == (1<<max_bits))
     {
       printf("Found magic for '%s' using %d/%d bits\n", is_bishop?"bishop":"rook", target_bits, max_bits);
-      print(C64(1) << square);
+      print(mask);
       break;
     }
 
