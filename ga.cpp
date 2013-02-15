@@ -12,9 +12,9 @@
 
 #define NUM_PARENTS 10
 #define NUM_RANDOM 2
-#define CROSSOVER_RATE 0.9f
-#define MUTATION_RATE 0.05f
-#define POPULATION_SIZE 500
+#define CROSSOVER_RATE 0.99f
+#define MUTATION_RATE 0.01f
+#define POPULATION_SIZE 1000
 #define CHROMO_LENGTH 64
 
 typedef unsigned long long U64;
@@ -263,7 +263,7 @@ int main(int argc, char **argv)
   srand(time(0));
   signal(SIGINT, stop);
 
-  min_bits = 6; // bishop in corner
+  min_bits = 7;
   target_bits = 11;
   square = 0;
   is_bishop = 0;
@@ -305,7 +305,8 @@ int main(int argc, char **argv)
 
   int generation = 0, fitness;
   stopped = false;
-  printf("Generating magic for '%s' on square %d using %d/%d bits\n", is_bishop?"bishop":"rook", square, target_bits, max_bits);
+  printf("Generating magic for '%s' using %d/%d bits\n", is_bishop?"bishop":"rook", target_bits, max_bits);
+  print(C64(1) << square);
   while (!stopped)
   {
     GetBestSolution(pool, solution);
@@ -315,7 +316,11 @@ int main(int argc, char **argv)
       printf("Generation[%4d] bad collisions(%d): 0x%llxULL\n", generation, (1<<max_bits)-fitness, solution);
 
     if (fitness == (1<<max_bits))
+    {
+      printf("Found magic for '%s' using %d/%d bits\n", is_bishop?"bishop":"rook", target_bits, max_bits);
+      print(C64(1) << square);
       break;
+    }
 
     SelectParents(pool, parents);
     GenerateOffspring(pool, parents);
