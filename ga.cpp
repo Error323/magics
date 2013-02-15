@@ -13,7 +13,7 @@
 #define NUM_PARENTS 10
 #define NUM_RANDOM 2
 #define CROSSOVER_RATE 0.99f
-#define MUTATION_RATE 0.01f
+#define MUTATION_RATE 0.1f
 #define POPULATION_SIZE 10000
 #define CHROMO_LENGTH 64
 
@@ -299,6 +299,7 @@ int main(int argc, char **argv)
 {
   srand(time(0));
   signal(SIGINT, stop);
+  signal(SIGTERM, stop);
 
   min_bits = 5;
   target_bits = 11;
