@@ -14,7 +14,7 @@
 #define NUM_RANDOM 2
 #define CROSSOVER_RATE 0.99f
 #define MUTATION_RATE 0.01f
-#define POPULATION_SIZE 500
+#define POPULATION_SIZE 10000
 #define CHROMO_LENGTH 64
 
 typedef unsigned long long U64;
@@ -347,25 +347,29 @@ int main(int argc, char **argv)
   int generation = 0;
   stopped = false;
   printf("Generating magic for '%s' using %d/%d bits\n", is_bishop?"bishop":"rook", target_bits, max_bits);
-  print(mask);
+  print(is_bishop?batt(square,C64(0)):ratt(square,C64(0)));
+  bool solution_found = false;
   while (!stopped)
   {
     GetBestSolution(pool, solution);
 
-    if (generation % 100 == 0 || solution.fitness == (1<<max_bits))
+    solution_found = solution.fitness == (1<<max_bits);
+    if (generation % 100 == 0)
       printf("Generation[%8d] bad collisions(%d): 0x%llxULL\n", generation, (1<<max_bits)-solution.fitness, solution.magic);
 
-    if (solution.fitness == (1<<max_bits))
-    {
-      printf("Found magic for '%s' using %d/%d bits\n", is_bishop?"bishop":"rook", target_bits, max_bits);
-      print(mask);
+    if (solution_found)
       break;
-    }
 
     SelectParents(pool, parents);
     GenerateOffspring(pool, parents);
     generation++;
   }
+
+  if (solution_found)
+    printf("Solution after %d generations: 0x%llxULL for '%s' square %d %d/%d bits.\n",
+      generation, solution.magic, is_bishop?"bishop":"rook", square, target_bits, max_bits);
+  else
+    printf("No solution found after %d generations\n", generation);
 
   return EXIT_SUCCESS;
 }
