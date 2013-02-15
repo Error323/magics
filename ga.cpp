@@ -246,9 +246,9 @@ void GenerateOffspring(std::vector<U64> &pool, const std::vector<U64> &parents)
     }
 
     // Create possible mutations
-    for (int i = 0; i < CHROMO_LENGTH; i++)
+    for (int j = 0; j < CHROMO_LENGTH; j++)
       if (RAND_FLT() < MUTATION_RATE)
-        child ^= (C64(1) << i);
+        child ^= (C64(1) << j);
   }
 }
 
