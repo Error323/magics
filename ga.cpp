@@ -9,6 +9,7 @@
 #include <cstdlib>
 #include <csignal>
 #include <cstdio>
+#include <getopt.h>
 
 #define NUM_PARENTS 20
 #define NUM_RANDOM 10
