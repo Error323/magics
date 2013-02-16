@@ -14,6 +14,7 @@
 #define NUM_RANDOM 10
 #define POPULATION_SIZE 1000
 #define CHROMO_LENGTH 64
+#define MSB 0xFF00000000000000ULL
 
 typedef unsigned long long U64;
 typedef unsigned char U8;
@@ -287,6 +288,9 @@ void InitializePopulation(std::vector<Chromosome> &pool)
   for (int i = 0; i < POPULATION_SIZE; i++)
   {
     pool[i].magic = R64Few();
+    while (count_1s((mask * pool[i].magic) & MSB) < min_bits)
+      pool[i].magic = R64Few();
+      
     pool[i].fitness = GetFitness(pool[i].magic);
   }
 }
@@ -304,7 +308,7 @@ void GetBestSolution(std::vector<Chromosome> &pool, Chromosome &solution)
 
 void SelectParents(const std::vector<Chromosome> &pool, std::vector<Chromosome> &parents)
 {
-  //NOTE: Assuming sorted pool - descending order
+  // NOTE: Assuming sorted pool - descending order
   for (int i = 0; i < NUM_PARENTS - NUM_RANDOM; i++)
     parents[i] = pool[i];
 
@@ -312,6 +316,9 @@ void SelectParents(const std::vector<Chromosome> &pool, std::vector<Chromosome> 
   for (int i = NUM_PARENTS - NUM_RANDOM; i < NUM_PARENTS; i++)
   {
     parents[i].magic = R64Few();
+    while (count_1s((mask * parents[i].magic) & MSB) < min_bits)
+      parents[i].magic = R64Few();
+
     parents[i].fitness = GetFitness(parents[i].magic);
   }
 }
@@ -319,6 +326,7 @@ void SelectParents(const std::vector<Chromosome> &pool, std::vector<Chromosome> 
 void GenerateOffspring(std::vector<Chromosome> &pool, const std::vector<Chromosome> &parents)
 {
   // Put first <n> best parents in new pool
+  // NOTE: Assuming sorted pool - descending order
   for (int i = 0; i < NUM_PARENTS - NUM_RANDOM; i++)
     pool[i] = parents[i];
 
@@ -363,7 +371,7 @@ int main(int argc, char **argv)
   signal(SIGINT, stop);
   signal(SIGTERM, stop);
 
-  min_bits = 3;
+  min_bits = 6;
   target_bits = 11;
   square = 0;
   is_bishop = 0;
