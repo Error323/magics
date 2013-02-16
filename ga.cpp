@@ -114,12 +114,11 @@ void print(const U64 &inBoard)
 
 U64 R64()
 {
-  U64 u1, u2, u3, u4;
-  u1 = (U64)(random()) & 0xFFFF;
-  u2 = (U64)(random()) & 0xFFFF;
-  u3 = (U64)(random()) & 0xFFFF;
-  u4 = (U64)(random()) & 0xFFFF;
-  return u1 | (u2 << 16) | (u3 << 32) | (u4 << 48);
+  U64 r;
+  r = random();
+  r <<= 32;
+  r |= random();
+  return r;
 }
 
 U64 R64Few()
@@ -365,14 +364,19 @@ void GenerateOffspring(std::vector<Chromosome> &pool, const std::vector<Chromoso
     int crossover = RAND_INT(1, CHROMO_LENGTH - 1);
     U64 father_side = (C64(1) << crossover) - 1;
     child = (father.magic & father_side) | (mother.magic & ~father_side);
+
     /*
     U64 father_side = R64();
     child = (father.magic & father_side) | (mother.magic & ~father_side);
     */
 
-    // Create possible mutations
-    U64 mutations = R64Few() & R64Few();
-    child.magic ^= mutations;
+    // Mutate some bits
+    child.magic ^= R64Few();
+    /*
+    for (int j = 0; j < CHROMO_LENGTH; j++)
+      if (RAND_FLT() < 0.1)
+        child.magic ^= (C64(1) << j);
+    */
 
     child.fitness = GetFitness(child.magic);
   }
@@ -452,8 +456,8 @@ int main(int argc, char **argv)
 
   int generation = 0;
   stopped = false;
-  fprintf(stdout, "Generating magic for '%s' on square %d using %d/%d bits\n",
-    is_bishop ? "bishop" : "rook", square, target_bits, max_bits);
+  fprintf(stdout, "Generating magic for '%s' on square %d using %d <= {%d} <= %d bits\n",
+    is_bishop ? "bishop" : "rook", square, min_bits, target_bits, max_bits);
   bool solution_found = false;
 
   while (!stopped)
@@ -474,8 +478,8 @@ int main(int argc, char **argv)
   }
 
   if (solution_found)
-    fprintf(stderr, "%d\t0x%llxULL\t%s\t %d\t%d\t%d\n",
-           generation, solution.magic, is_bishop ? "bishop" : "rook", square, target_bits, max_bits);
+    fprintf(stderr, "%d\t0x%llxULL\t%s\t %c%d\t%d\t%d\n",
+           generation, solution.magic, is_bishop ? "bishop" : "rook", char(square%8+65), square/8+1, target_bits, max_bits);
   else
     fprintf(stdout, "No solution found after %d generations\n", generation);
 
