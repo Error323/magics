@@ -12,7 +12,7 @@
 #include <getopt.h>
 
 #define NUM_PARENTS 20
-#define NUM_RANDOM 10
+#define NUM_RANDOM 0
 #define POPULATION_SIZE 1000
 #define CHROMO_LENGTH 64
 #define MSB 0xFF00000000000000ULL
@@ -32,6 +32,7 @@ U64 magic;
 int target_bits;
 int max_bits;
 int min_bits;
+int fitness_sum;
 std::vector<U64> attack_list;
 std::vector<U64> block_list;
 std::vector<U64> used_list;
@@ -326,25 +327,62 @@ void InitializePopulation(std::vector<Chromosome> &pool)
   }
 }
 
-bool ChromosomeSorter(const Chromosome &a, const Chromosome &b)
-{
-  return a.fitness > b.fitness;
-}
-
 void GetBestSolution(std::vector<Chromosome> &pool, Chromosome &solution)
 {
-  std::sort(pool.begin(), pool.end(), ChromosomeSorter);
-  solution = pool[0];
+  fitness_sum = 0;
+  int best = 0;
+  for (int i = 0; i < POPULATION_SIZE; i++)
+  {
+    fitness_sum += pool[i].fitness;
+    if (pool[i].fitness > best)
+    {
+      best = pool[i].fitness;
+      solution = pool[i];
+    }
+  }
 }
 
-void SelectParents(const std::vector<Chromosome> &pool, std::vector<Chromosome> &parents)
+void SelectParents(const std::vector<Chromosome> &pool, std::vector<Chromosome> &parents, const Chromosome &solution)
 {
-  // NOTE: Assuming sorted pool - descending order
-  for (int i = 0; i < NUM_PARENTS - NUM_RANDOM; i++)
-    parents[i] = pool[i];
+  // Add parents using roulette wheel selection
+  int num_parents = NUM_PARENTS-NUM_RANDOM;
+  int randoms[num_parents];
+  bool done[num_parents];
+  for (int i = 1; i < num_parents; i++)
+  {
+    randoms[i] = RAND_INT(0, fitness_sum-1);
+    done[i] = false;
+  }
+
+  // Hard add the previous best solution
+  parents[0] = solution;
+  done[0] = true;
+
+  int sum = 0;
+  bool can_stop = true;
+  for (int i = 0; i < POPULATION_SIZE; i++)
+  {
+    sum += pool[i].fitness;
+    for (int j = 1; j < num_parents; j++)
+    {
+      can_stop = can_stop && done[j];
+
+      if (done[j])
+        continue;
+
+      if (randoms[j] < sum)
+      {
+        parents[j] = pool[i];
+        done[j] = true;
+      }
+    }
+
+    if (can_stop)
+      break;
+  }
 
   // Add some random parents
-  for (int i = NUM_PARENTS - NUM_RANDOM; i < NUM_PARENTS; i++)
+  for (int i = num_parents; i < NUM_PARENTS; i++)
   {
     parents[i].magic = R64Few();
     while (count_1s((mask * parents[i].magic) & MSB) < min_bits)
@@ -476,7 +514,7 @@ int main(int argc, char **argv)
       fprintf(stdout, "Generation[%8d] bad collisions(%d): 0x%llxULL\n",
               generation, (1 << max_bits) - solution.fitness, solution.magic);
 
-    SelectParents(pool, parents);
+    SelectParents(pool, parents, solution);
     GenerateOffspring(pool, parents);
     generation++;
   }
