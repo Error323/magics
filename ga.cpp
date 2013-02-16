@@ -11,8 +11,8 @@
 #include <cstdio>
 #include <getopt.h>
 
-#define NUM_PARENTS 20
-#define NUM_RANDOM 0
+#define NUM_PARENTS 50
+#define NUM_RANDOM 2
 #define POPULATION_SIZE 1000
 #define CHROMO_LENGTH 64
 #define MSB 0xFF00000000000000ULL
