@@ -27,6 +27,7 @@ typedef unsigned char U8;
 int square;
 int is_bishop;
 U64 mask;
+U64 magic;
 int target_bits;
 int max_bits;
 int min_bits;
@@ -316,6 +317,12 @@ void InitializePopulation(std::vector<Chromosome> &pool)
       
     pool[i].fitness = GetFitness(pool[i].magic);
   }
+
+  if (magic != C64(0))
+  {
+    pool[0].magic = magic;
+    pool[0].fitness = GetFitness(magic);
+  }
 }
 
 bool ChromosomeSorter(const Chromosome &a, const Chromosome &b)
@@ -392,6 +399,7 @@ void print_and_exit(int min, int max, int ret)
   else
     printf(" -t\tbits to use\n");
   printf(" -b\tsearch for bishop, otherwise for rook\n");
+  printf(" -m\tseed population with this magic number\n");
   exit(ret);
 }
 
@@ -405,14 +413,16 @@ int main(int argc, char **argv)
   square = 0;
   is_bishop = 0;
   min_bits = 0;
+  magic = C64(0);
 
   int c;
-  while ((c = getopt(argc, argv, "s:t:bh")) != -1)
+  while ((c = getopt(argc, argv, "s:t:bhm:")) != -1)
   {
     switch (c)
     {
     case 's': square = atoi(optarg); break;
     case 't': target_bits = atoi(optarg); break;
+    case 'm': magic = strtoull(optarg, 0, 0); break;
     case 'b': is_bishop = 1; break;
     case 'h': print_and_exit(-1, -1, EXIT_SUCCESS);
     case '?':
