@@ -57,6 +57,30 @@ public:
   int fitness;
 };
 
+const int r_dist_attack_sets[64] =
+{
+  49, 42, 70,  84,  84,  70,  42, 49,
+  42, 36, 60,  72,  72,  60,  36, 42,
+  70, 60, 100, 120, 120, 100, 60, 70,
+  84, 72, 120, 144, 144, 120, 72, 84,
+  84, 72, 120, 144, 144, 120, 72, 84,
+  70, 60, 100, 120, 120, 100, 60, 70,
+  42, 36, 60,  72,  72,  60,  36, 42,
+  49, 42, 70,  84,  84,  70,  42, 49
+};
+
+const int b_dist_attack_sets[64] =
+{
+  7,  6,  10, 12,  12,  10, 6,  7,
+  6,  6,  10, 12,  12,  10, 6,  6,
+  10, 10, 40, 48,  48,  40, 10, 10,
+  12, 12, 48, 108, 108, 48, 12, 12,
+  12, 12, 48, 108, 108, 48, 12, 12,
+  10, 10, 40, 48,  48,  40, 10, 10,
+  6,  6,  10, 12,  12,  10, 6,  6,
+  7,  6,  10, 12,  12,  10, 6,  7
+};
+
 const int bit_table[64] =
 {
   63, 30, 3 , 32, 25, 41, 22, 33,
@@ -341,6 +365,10 @@ void GenerateOffspring(std::vector<Chromosome> &pool, const std::vector<Chromoso
     int crossover = RAND_INT(1, CHROMO_LENGTH - 1);
     U64 father_side = (C64(1) << crossover) - 1;
     child = (father.magic & father_side) | (mother.magic & ~father_side);
+    /*
+    U64 father_side = R64();
+    child = (father.magic & father_side) | (mother.magic & ~father_side);
+    */
 
     // Create possible mutations
     U64 mutations = R64Few() & R64Few();
@@ -356,13 +384,19 @@ void stop(int)
   stopped = true;
 }
 
-void print_and_exit()
+void print_and_exit(int min, int max, int ret)
 {
-  printf("Usage: magics <square> <target-bits> [is_bishop]\n");
-  printf("       <square> in {0,...,63}\n");
-  printf("       <target-bits> number of bits to look for magics\n");
-  printf("       <is_bishop> in {1,0} bishop or rook\n");
-  exit(EXIT_FAILURE);
+  printf("Usage: magics [OPTION]...\n");
+  printf(" Find magics for a given square.\n");
+  printf(" Example: magics -s 0 -t 11\n\n");
+  printf(" -h\tdisplay this help message\n");
+  printf(" -s\tsquare to look for in {0,...,63}\n");
+  if (min != -1 && max != -1)
+    printf(" -t\tbits to use in {%d,...,%d}\n", min, max);
+  else
+    printf(" -t\tbits to use\n");
+  printf(" -b\tsearch for bishop, otherwise for rook\n");
+  exit(ret);
 }
 
 int main(int argc, char **argv)
@@ -371,35 +405,35 @@ int main(int argc, char **argv)
   signal(SIGINT, stop);
   signal(SIGTERM, stop);
 
-  min_bits = 6;
   target_bits = 11;
   square = 0;
   is_bishop = 0;
+  min_bits = 0;
 
-  switch (argc)
+  int c;
+  while ((c = getopt(argc, argv, "s:t:bh")) != -1)
   {
-  case 4:
-    square = atoi(argv[1]);
-    target_bits = atoi(argv[2]);
-    is_bishop = atoi(argv[3]);
-    break;
-  case 3:
-    square = atoi(argv[1]);
-    target_bits = atoi(argv[2]);
-    break;
-  default:
-    print_and_exit();
-    break;
+    switch (c)
+    {
+    case 's': square = atoi(optarg); break;
+    case 't': target_bits = atoi(optarg); break;
+    case 'b': is_bishop = 1; break;
+    case 'h': print_and_exit(-1, -1, EXIT_SUCCESS);
+    case '?':
+    default: print_and_exit(-1, -1, EXIT_FAILURE);
+    }
   }
+
+  if (square < 0 || square > 63 || argc == 1)
+    print_and_exit(-1, -1, EXIT_FAILURE);
 
   mask = is_bishop ? bmask(square) : rmask(square);
   max_bits = count_1s(mask);
+  min_bits = is_bishop ? b_dist_attack_sets[square] : r_dist_attack_sets[square];
+  min_bits = ceil(log2(min_bits));
 
-  if (square < 0 || square > 63)
-    print_and_exit();
-
-  if (target_bits > max_bits)
-    print_and_exit();
+  if (target_bits < min_bits || target_bits > max_bits)
+    print_and_exit(min_bits, max_bits, EXIT_FAILURE);
 
   attack_list.resize(1 << max_bits);
   block_list.resize(1 << max_bits);
@@ -418,7 +452,8 @@ int main(int argc, char **argv)
 
   int generation = 0;
   stopped = false;
-  fprintf(stdout, "Generating magic for '%s' using %d/%d bits\n", is_bishop ? "bishop" : "rook", target_bits, max_bits);
+  fprintf(stdout, "Generating magic for '%s' on square %d using %d/%d bits\n",
+    is_bishop ? "bishop" : "rook", square, target_bits, max_bits);
   bool solution_found = false;
 
   while (!stopped)
