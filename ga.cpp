@@ -356,6 +356,7 @@ void GenerateOffspring(std::vector<Chromosome> &pool, const std::vector<Chromoso
   // Create offspring
   for (int i = NUM_PARENTS - NUM_RANDOM; i < POPULATION_SIZE; i++)
   {
+    // Select parents
     Chromosome &child = pool[i];
     const Chromosome &father = parents[RAND_INT(0, NUM_PARENTS - 1)];
     const Chromosome &mother = parents[RAND_INT(0, NUM_PARENTS - 1)];
@@ -365,19 +366,10 @@ void GenerateOffspring(std::vector<Chromosome> &pool, const std::vector<Chromoso
     U64 father_side = (C64(1) << crossover) - 1;
     child = (father.magic & father_side) | (mother.magic & ~father_side);
 
-    /*
-    U64 father_side = R64();
-    child = (father.magic & father_side) | (mother.magic & ~father_side);
-    */
-
     // Mutate some bits
     child.magic ^= R64Few();
-    /*
-    for (int j = 0; j < CHROMO_LENGTH; j++)
-      if (RAND_FLT() < 0.1)
-        child.magic ^= (C64(1) << j);
-    */
-
+    
+    // Compute new fitness
     child.fitness = GetFitness(child.magic);
   }
 }
@@ -456,8 +448,8 @@ int main(int argc, char **argv)
 
   int generation = 0;
   stopped = false;
-  fprintf(stdout, "Generating magic for '%s' on square %d using %d <= {%d} <= %d bits\n",
-    is_bishop ? "bishop" : "rook", square, min_bits, target_bits, max_bits);
+  fprintf(stdout, "Generating magic for '%s' on square %d using %d <= {%d} <= %d bits\n", 
+          is_bishop ? "bishop" : "rook", square, min_bits, target_bits, max_bits);
   bool solution_found = false;
 
   while (!stopped)
@@ -470,7 +462,8 @@ int main(int argc, char **argv)
       break;
 
     if (generation % 100 == 0)
-      fprintf(stdout, "Generation[%8d] bad collisions(%d): 0x%llxULL\n", generation, (1 << max_bits) - solution.fitness, solution.magic);
+      fprintf(stdout, "Generation[%8d] bad collisions(%d): 0x%llxULL\n",
+              generation, (1 << max_bits) - solution.fitness, solution.magic);
 
     SelectParents(pool, parents);
     GenerateOffspring(pool, parents);
@@ -479,7 +472,8 @@ int main(int argc, char **argv)
 
   if (solution_found)
     fprintf(stderr, "%d\t0x%llxULL\t%s\t %c%d\t%d\t%d\n",
-           generation, solution.magic, is_bishop ? "bishop" : "rook", char(square%8+65), square/8+1, target_bits, max_bits);
+            generation, solution.magic, is_bishop ? "bishop" : "rook",
+            char(square%8+65), square/8+1, target_bits, max_bits);
   else
     fprintf(stdout, "No solution found after %d generations\n", generation);
 
