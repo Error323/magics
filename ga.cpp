@@ -314,9 +314,6 @@ void InitializePopulation(std::vector<Chromosome> &pool)
   for (int i = 0; i < POPULATION_SIZE; i++)
   {
     pool[i].magic = R64Few();
-    while (count_1s((mask * pool[i].magic) & MSB) < min_bits)
-      pool[i].magic = R64Few();
-      
     pool[i].fitness = GetFitness(pool[i].magic);
   }
 
@@ -385,9 +382,6 @@ void SelectParents(const std::vector<Chromosome> &pool, std::vector<Chromosome> 
   for (int i = num_parents; i < NUM_PARENTS; i++)
   {
     parents[i].magic = R64Few();
-    while (count_1s((mask * parents[i].magic) & MSB) < min_bits)
-      parents[i].magic = R64Few();
-
     parents[i].fitness = GetFitness(parents[i].magic);
   }
 }
