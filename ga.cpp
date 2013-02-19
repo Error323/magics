@@ -568,7 +568,9 @@ int main(int argc, char **argv)
             char(square%8+65), square/8+1, square);
   }
   else
-    fprintf(stderr, "No solution found after %d generations\n", generation);
+    fprintf(stderr, "FAIL\t%s\t %c%d\t%d\n",
+            is_bishop ? "bishop" : "rook",
+            char(square%8+65), square/8+1, square);
 
   return EXIT_SUCCESS;
 }
