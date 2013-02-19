@@ -26,9 +26,9 @@ int square;
 int is_bishop;
 U64 mask;
 U64 magic_seed;
-int target_bits;
-int max_bits;
-int min_bits;
+unsigned int target_bits;
+unsigned int max_bits;
+unsigned int min_bits;
 float fitness_sum;
 std::vector<U64> attack_list;
 std::vector<U64> block_list;
@@ -105,7 +105,7 @@ void print(const U64 &inBoard)
     U8 line = (inBoard >> (i * 8)) & 0xff;
 
     for (int j = 0; j < 8; j++)
-      printf(" %s", ((line >> j) & 1) == 1 ? " 1" : " .");
+      printf(" %s", ((line >> j) & 1) == 1 ? "1" : ".");
 
     printf("\n");
   }
@@ -127,11 +127,11 @@ U64 R64Few()
   return R64() & R64() & R64();
 }
 
-U64 Magic(int shift)
+U64 Magic(const U64 bits)
 {
-  U64 magic = R64Few();
-  while (int(magic >> 58) != shift)
-    magic = R64Few();
+  U64 shift = 64 - bits;
+  U64 magic = R64Few() & 0x3ffffffffffffff;
+  magic |= shift << 58;
 
   return magic;
 }
@@ -333,7 +333,7 @@ void InitializePopulation(std::vector<Chromosome> &pool)
     ComputeFitness(pool[i]);
   }
 
-  if (magic_seed != C64(0))
+  if (magic_seed != C64(0) && magic_seed >> 58 == 64-target_bits)
   {
     pool[0].magic = magic_seed;
     ComputeFitness(pool[0]);
@@ -426,7 +426,7 @@ void GenerateOffspring(std::vector<Chromosome> &pool, const std::vector<Chromoso
     child = (father.magic & father_side) | (mother.magic & ~father_side);
 
     // Mutate some bits
-    child.magic ^= R64Few();
+    child.magic ^= R64Few() & 0x3ffffffffffffff;
     
     // Compute new fitness
     ComputeFitness(child);
@@ -558,7 +558,7 @@ int main(int argc, char **argv)
 
   if (solution_found)
   {
-    assert(target_bits == int(solution.magic >> 58));
+    assert(target_bits == 64-(solution.magic >> 58));
     fprintf(stderr, "0x%llxull\t%s\t %c%d\t%d\n",
             solution.magic, is_bishop ? "bishop" : "rook",
             char(square%8+65), square/8+1, square);
