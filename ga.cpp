@@ -130,7 +130,7 @@ U64 R64Few()
 U64 Magic(int shift)
 {
   U64 magic = R64Few();
-  while ((magic >> 58) != shift)
+  while (int(magic >> 58) != shift)
     magic = R64Few();
 
   return magic;
@@ -558,7 +558,7 @@ int main(int argc, char **argv)
 
   if (solution_found)
   {
-    assert(target_bits == (solution.magic >> 58));
+    assert(target_bits == int(solution.magic >> 58));
     fprintf(stderr, "0x%llxull\t%s\t %c%d\t%d\n",
             solution.magic, is_bishop ? "bishop" : "rook",
             char(square%8+65), square/8+1, square);
