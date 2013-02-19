@@ -551,9 +551,9 @@ int main(int argc, char **argv)
       break;
 
     if (generation % 100 == 0)
-      printf("G %d\tC %d\tF %0.2f\tS %d/%lu\t%s\n0x%llu",
+      printf("G %d\tC %d\tF %0.2f\tS %d/%lu\t0x%llu\t%s\n",
              generation, solution.collisions, solution.fitness,
-             solution.space_used, used_list.size(), cmd_line, solution.magic);
+             solution.space_used, used_list.size(), solution.magic, cmd_line);
 
     SelectParents(pool, parents, solution);
     GenerateOffspring(pool, parents);
