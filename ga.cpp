@@ -25,7 +25,7 @@ typedef unsigned char U8;
 int square;
 int is_bishop;
 U64 mask;
-U64 magic;
+U64 magic_seed;
 int target_bits;
 int max_bits;
 int min_bits;
@@ -321,9 +321,9 @@ void InitializePopulation(std::vector<Chromosome> &pool)
     ComputeFitness(pool[i]);
   }
 
-  if (magic != C64(0))
+  if (magic_seed != C64(0))
   {
-    pool[0].magic = magic;
+    pool[0].magic = magic_seed;
     ComputeFitness(pool[0]);
   }
 }
@@ -428,19 +428,20 @@ void stop(int)
   stopped = true;
 }
 
-void print_and_exit(int min, int max, int ret)
+void print_and_exit(int ret)
 {
   printf("Usage: magics [OPTION]...\n");
   printf(" Find magics for a given square.\n");
   printf(" Example: magics -s 0 -t 11\n\n");
   printf(" -h\tdisplay this help message\n");
   printf(" -s\tsquare to look for in {0,...,63}\n");
-  if (min != -1 && max != -1)
-    printf(" -t\tbits to use in {%d,...,%d}\n", min, max);
-  else
+  if (min_bits == 0 || max_bits == 0)
     printf(" -t\tbits to use\n");
+  else
+    printf(" -t\tbits to use in {%d,...,%d}\n", min_bits, max_bits);
   printf(" -b\tsearch for bishop, otherwise for rook\n");
   printf(" -m\tseed population with this magic number\n");
+
   exit(ret);
 }
 
@@ -450,11 +451,12 @@ int main(int argc, char **argv)
   signal(SIGINT, stop);
   signal(SIGTERM, stop);
 
-  target_bits = 11;
+  target_bits = 0;
   square = 0;
   is_bishop = 0;
   min_bits = 0;
-  magic = C64(0);
+  max_bits = 0;
+  magic_seed = C64(0);
 
   int c;
   while ((c = getopt(argc, argv, "s:t:bhm:")) != -1)
@@ -463,16 +465,19 @@ int main(int argc, char **argv)
     {
     case 's': square = atoi(optarg); break;
     case 't': target_bits = atoi(optarg); break;
-    case 'm': magic = strtoull(optarg, 0, 0); break;
+    case 'm': magic_seed = strtoull(optarg, 0, 0); break;
     case 'b': is_bishop = 1; break;
-    case 'h': print_and_exit(-1, -1, EXIT_SUCCESS);
+    case 'h': print_and_exit(EXIT_SUCCESS);
     case '?':
-    default: print_and_exit(-1, -1, EXIT_FAILURE);
+    default: print_and_exit(EXIT_FAILURE);
     }
   }
 
-  if (square < 0 || square > 63 || argc == 1)
-    print_and_exit(-1, -1, EXIT_FAILURE);
+  if (square < 0 || square > 63)
+  {
+    fprintf(stderr, "Error: target square %d not in {0,...,63}\n", square);
+    return EXIT_FAILURE;
+  }
 
   mask = is_bishop ? bmask(square) : rmask(square);
   max_bits = count_1s(mask);
@@ -480,7 +485,10 @@ int main(int argc, char **argv)
   min_bits = ceil(log2(min_bits));
 
   if (target_bits < min_bits || target_bits > max_bits)
-    print_and_exit(min_bits, max_bits, EXIT_FAILURE);
+  {
+    fprintf(stderr, "Error: target bits %d not in {%d,...,%d}\n", target_bits, min_bits, max_bits);
+    return EXIT_FAILURE;
+  }
 
   attack_list.resize(1 << max_bits);
   block_list.resize(1 << max_bits);
