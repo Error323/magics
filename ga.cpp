@@ -1,13 +1,13 @@
 #include <vector>
-#include <algorithm>
 
-#include <ctime>
-#include <cmath>
-#include <cstdlib>
-#include <csignal>
-#include <cstdio>
-#include <cstring>
+#include <time.h>
+#include <math.h>
+#include <stdlib.h>
+#include <signal.h>
+#include <stdio.h>
 #include <getopt.h>
+#include <assert.h>
+#include <string.h>
 
 #define NUM_PARENTS 5
 #define NUM_RANDOM 1
@@ -125,6 +125,15 @@ U64 R64()
 U64 R64Few()
 {
   return R64() & R64() & R64();
+}
+
+U64 Magic(int shift)
+{
+  U64 magic = R64Few();
+  while ((magic >> 58) != shift)
+    magic = R64Few();
+
+  return magic;
 }
 
 int count_1s(U64 b)
@@ -282,9 +291,12 @@ U64 batt(int sq, U64 block)
 }
 
 
-int transform(U64 b, U64 magic, int bits)
+int transform(U64 board, const U64 magic)
 {
-  return (int)((b * magic) >> (64 - bits));
+  board *= magic;
+  board >>= (magic >> 58);
+
+  return static_cast<int>(board);
 }
 
 void ComputeFitness(Chromosome &chromosome)
@@ -297,7 +309,7 @@ void ComputeFitness(Chromosome &chromosome)
   n = (1 << max_bits);
   for (int i = 0; i < n; i++)
   {
-    index = transform(block_list[i], chromosome.magic, target_bits);
+    index = transform(block_list[i], chromosome.magic);
 
     if (used_list[index] == C64(0))
     {
@@ -317,7 +329,7 @@ void InitializePopulation(std::vector<Chromosome> &pool)
 {
   for (int i = 0; i < POPULATION_SIZE; i++)
   {
-    pool[i].magic = R64Few();
+    pool[i].magic = Magic(target_bits);
     ComputeFitness(pool[i]);
   }
 
@@ -385,7 +397,7 @@ void SelectParents(const std::vector<Chromosome> &pool, std::vector<Chromosome> 
   // Add some random parents
   for (int i = num_parents; i < NUM_PARENTS; i++)
   {
-    parents[i].magic = R64Few();
+    parents[i].magic = Magic(target_bits);
     ComputeFitness(parents[i]);
   }
 }
@@ -393,7 +405,6 @@ void SelectParents(const std::vector<Chromosome> &pool, std::vector<Chromosome> 
 void GenerateOffspring(std::vector<Chromosome> &pool, const std::vector<Chromosome> &parents)
 {
   // Put first <n> best parents in new pool
-  // NOTE: Assuming sorted pool - descending order
   for (int i = 0; i < NUM_PARENTS - NUM_RANDOM; i++)
     pool[i] = parents[i];
 
@@ -432,6 +443,8 @@ void print_and_exit(int ret)
 {
   printf("Usage: magics [OPTION]...\n");
   printf(" Find magics for a given square.\n");
+  printf(" Recover shift with (magic >> 58).\n");
+  printf(" Prints solution to stderr.\n");
   printf(" Example: magics -s 0 -t 11\n\n");
   printf(" -h\tdisplay this help message\n");
   printf(" -s\tsquare to look for in {0,...,63}\n");
@@ -473,6 +486,9 @@ int main(int argc, char **argv)
     }
   }
 
+  if (argc == 1)
+    print_and_exit(EXIT_FAILURE);
+
   if (square < 0 || square > 63)
   {
     fprintf(stderr, "Error: target square %d not in {0,...,63}\n", square);
@@ -483,6 +499,8 @@ int main(int argc, char **argv)
   max_bits = count_1s(mask);
   min_bits = is_bishop ? b_dist_attack_sets[square] : r_dist_attack_sets[square];
   min_bits = ceil(log2(min_bits));
+
+  if (target_bits == 0) target_bits = max_bits;
 
   if (target_bits < min_bits || target_bits > max_bits)
   {
@@ -539,9 +557,12 @@ int main(int argc, char **argv)
   }
 
   if (solution_found)
-    fprintf(stderr, "%d\t0x%llxULL\t%s\t %c%d\t%d\t%d\n",
-            generation, solution.magic, is_bishop ? "bishop" : "rook",
-            char(square%8+65), square/8+1, target_bits, max_bits);
+  {
+    assert(target_bits == (solution.magic >> 58));
+    fprintf(stderr, "0x%llxull\t%s\t %c%d\t%d\n",
+            solution.magic, is_bishop ? "bishop" : "rook",
+            char(square%8+65), square/8+1, square);
+  }
   else
     fprintf(stderr, "No solution found after %d generations\n", generation);
 
