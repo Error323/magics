@@ -1,7 +1,4 @@
 #include <vector>
-#include <string>
-#include <iostream>
-#include <sstream>
 #include <algorithm>
 
 #include <ctime>
@@ -9,13 +6,13 @@
 #include <cstdlib>
 #include <csignal>
 #include <cstdio>
+#include <cstring>
 #include <getopt.h>
 
-#define NUM_PARENTS 50
-#define NUM_RANDOM 2
-#define POPULATION_SIZE 10000
+#define NUM_PARENTS 5
+#define NUM_RANDOM 1
+#define POPULATION_SIZE 1000
 #define CHROMO_LENGTH 64
-#define MSB 0xFF00000000000000ULL
 
 typedef unsigned long long U64;
 typedef unsigned char U8;
@@ -32,7 +29,7 @@ U64 magic;
 int target_bits;
 int max_bits;
 int min_bits;
-int fitness_sum;
+float fitness_sum;
 std::vector<U64> attack_list;
 std::vector<U64> block_list;
 std::vector<U64> used_list;
@@ -40,10 +37,10 @@ std::vector<U64> used_list;
 class Chromosome
 {
 public:
-  Chromosome(): magic(C64(0)), fitness(-1) {}
-  Chromosome(U64 m): magic(m), fitness(-1) {}
-  Chromosome(U64 m, int f): magic(m), fitness(f) {}
-  Chromosome(const Chromosome &c): magic(c.magic), fitness(c.fitness) {}
+  Chromosome(): magic(C64(0)), space_used(0), collisions(0), fitness(0.0f) {}
+  Chromosome(U64 m): magic(m), space_used(0), collisions(0), fitness(0.0f) {}
+  Chromosome(U64 m, int f): magic(m), space_used(0), collisions(0), fitness(f) {}
+  Chromosome(const Chromosome &c): magic(c.magic), space_used(c.space_used), collisions(c.collisions), fitness(c.fitness) {}
 
   Chromosome &operator=(const Chromosome &c)
   {
@@ -51,13 +48,17 @@ public:
     {
       magic = c.magic;
       fitness = c.fitness;
+      space_used = c.space_used;
+      collisions = c.collisions;
     }
 
     return *this;
   }
 
   U64 magic;
-  int fitness;
+  int space_used;
+  int collisions;
+  float fitness;
 };
 
 const int r_dist_attack_sets[64] =
@@ -98,21 +99,18 @@ const int bit_table[64] =
 
 void print(const U64 &inBoard)
 {
-  std::stringstream ss;
-
   for (int i = 7; i >= 0; i--)
   {
-    ss << i + 1;
+    printf("%d", i+1);
     U8 line = (inBoard >> (i * 8)) & 0xff;
 
     for (int j = 0; j < 8; j++)
-      ss << (((line >> j) & 1) == 1 ? " 1" : " .");
+      printf(" %s", ((line >> j) & 1) == 1 ? " 1" : " .");
 
-    ss << "\n";
+    printf("\n");
   }
 
-  ss << "  a b c d e f g h\n";
-  std::cout << ss.str();
+  printf("  a b c d e f g h\n");
 }
 
 U64 R64()
@@ -289,24 +287,30 @@ int transform(U64 b, U64 magic, int bits)
   return (int)((b * magic) >> (64 - bits));
 }
 
-int GetFitness(const U64 chromosome)
+void ComputeFitness(Chromosome &chromosome)
 {
   used_list.assign(used_list.size(), C64(0));
-  int bad_collisions = 0;
-  int index;
+  chromosome.collisions = 0;
+  chromosome.space_used = 0;
+  int index, n;
 
-  for (int i = 0; i < (1 << max_bits); i++)
+  n = (1 << max_bits);
+  for (int i = 0; i < n; i++)
   {
-    index = transform(block_list[i], chromosome, target_bits);
+    index = transform(block_list[i], chromosome.magic, target_bits);
 
     if (used_list[index] == C64(0))
+    {
       used_list[index] = attack_list[i];
+      chromosome.space_used++;
+    }
     else
     if (used_list[index] != attack_list[i])
-      bad_collisions++;
+      chromosome.collisions++;
   }
 
-  return (1 << max_bits) - bad_collisions;
+  chromosome.fitness = 
+    (n - chromosome.collisions) - (1.0f/used_list.size() * chromosome.space_used);
 }
 
 void InitializePopulation(std::vector<Chromosome> &pool)
@@ -314,20 +318,20 @@ void InitializePopulation(std::vector<Chromosome> &pool)
   for (int i = 0; i < POPULATION_SIZE; i++)
   {
     pool[i].magic = R64Few();
-    pool[i].fitness = GetFitness(pool[i].magic);
+    ComputeFitness(pool[i]);
   }
 
   if (magic != C64(0))
   {
     pool[0].magic = magic;
-    pool[0].fitness = GetFitness(magic);
+    ComputeFitness(pool[0]);
   }
 }
 
 void GetBestSolution(std::vector<Chromosome> &pool, Chromosome &solution)
 {
-  fitness_sum = 0;
-  int best = 0;
+  fitness_sum = 0.0f;
+  float best = 0;
   for (int i = 0; i < POPULATION_SIZE; i++)
   {
     fitness_sum += pool[i].fitness;
@@ -347,7 +351,7 @@ void SelectParents(const std::vector<Chromosome> &pool, std::vector<Chromosome> 
   bool done[num_parents];
   for (int i = 1; i < num_parents; i++)
   {
-    randoms[i] = RAND_INT(0, fitness_sum-1);
+    randoms[i] = RAND_FLT() * fitness_sum;
     done[i] = false;
   }
 
@@ -382,7 +386,7 @@ void SelectParents(const std::vector<Chromosome> &pool, std::vector<Chromosome> 
   for (int i = num_parents; i < NUM_PARENTS; i++)
   {
     parents[i].magic = R64Few();
-    parents[i].fitness = GetFitness(parents[i].magic);
+    ComputeFitness(parents[i]);
   }
 }
 
@@ -398,8 +402,12 @@ void GenerateOffspring(std::vector<Chromosome> &pool, const std::vector<Chromoso
   {
     // Select parents
     Chromosome &child = pool[i];
-    const Chromosome &father = parents[RAND_INT(0, NUM_PARENTS - 1)];
-    const Chromosome &mother = parents[RAND_INT(0, NUM_PARENTS - 1)];
+    int r1 = RAND_INT(0, NUM_PARENTS-1);
+    int r2 = RAND_INT(0, NUM_PARENTS-1);
+    while (r1 == r2)
+      r2 = RAND_INT(0, NUM_PARENTS-1);
+    const Chromosome &father = parents[r1];
+    const Chromosome &mother = parents[r2];
 
     // Mate between father and mother
     int crossover = RAND_INT(1, CHROMO_LENGTH - 1);
@@ -410,7 +418,7 @@ void GenerateOffspring(std::vector<Chromosome> &pool, const std::vector<Chromoso
     child.magic ^= R64Few();
     
     // Compute new fitness
-    child.fitness = GetFitness(child.magic);
+    ComputeFitness(child);
   }
 }
 
@@ -489,24 +497,33 @@ int main(int argc, char **argv)
   Chromosome solution;
   InitializePopulation(pool);
 
+  printf("Generating magic for '%s' on square %c%d using %d <= (%d) <= %d bits\n", 
+          is_bishop ? "bishop" : "rook", char(square%8+65), square/8+1,
+          min_bits, target_bits, max_bits);
+
+  char cmd_line[256];
+  for (int i = 0, j = 0; i < argc; i++)
+  {
+    strcpy(&cmd_line[j], argv[i]);
+    j += strlen(argv[i]);
+  }
+
   int generation = 0;
   stopped = false;
-  fprintf(stdout, "Generating magic for '%s' on square %d using %d <= {%d} <= %d bits\n", 
-          is_bishop ? "bishop" : "rook", square, min_bits, target_bits, max_bits);
   bool solution_found = false;
-
   while (!stopped)
   {
     GetBestSolution(pool, solution);
 
-    solution_found = solution.fitness == (1 << max_bits);
+    solution_found = solution.collisions == 0;
 
     if (solution_found)
       break;
 
     if (generation % 100 == 0)
-      fprintf(stdout, "Generation[%8d] bad collisions(%d): 0x%llxULL\n",
-              generation, (1 << max_bits) - solution.fitness, solution.magic);
+      printf("G %d\tC %d\tF %0.2f\tS %d/%lu\t%s\n",
+             generation, solution.collisions, solution.fitness,
+             solution.space_used, used_list.size(), cmd_line);
 
     SelectParents(pool, parents, solution);
     GenerateOffspring(pool, parents);
@@ -518,7 +535,7 @@ int main(int argc, char **argv)
             generation, solution.magic, is_bishop ? "bishop" : "rook",
             char(square%8+65), square/8+1, target_bits, max_bits);
   else
-    fprintf(stdout, "No solution found after %d generations\n", generation);
+    fprintf(stderr, "No solution found after %d generations\n", generation);
 
   return EXIT_SUCCESS;
 }
