@@ -448,6 +448,7 @@ void print_and_exit(int ret)
   printf(" Example: magics -s 0 -t 11\n\n");
   printf(" -h\tdisplay this help message\n");
   printf(" -s\tsquare to look for in {0,...,63}\n");
+  printf(" -1\tlook for magics using max_bits-1\n");
   if (min_bits == 0 || max_bits == 0)
     printf(" -t\tbits to use\n");
   else
@@ -470,9 +471,10 @@ int main(int argc, char **argv)
   min_bits = 0;
   max_bits = 0;
   magic_seed = C64(0);
+  bool max_bits_min_one = false;
 
   int c;
-  while ((c = getopt(argc, argv, "s:t:bhm:")) != -1)
+  while ((c = getopt(argc, argv, "1s:t:bhm:")) != -1)
   {
     switch (c)
     {
@@ -480,6 +482,7 @@ int main(int argc, char **argv)
     case 't': target_bits = atoi(optarg); break;
     case 'm': magic_seed = strtoull(optarg, 0, 0); break;
     case 'b': is_bishop = 1; break;
+    case '1': max_bits_min_one = true; break;
     case 'h': print_and_exit(EXIT_SUCCESS);
     case '?':
     default: print_and_exit(EXIT_FAILURE);
@@ -501,6 +504,7 @@ int main(int argc, char **argv)
   min_bits = ceil(log2(min_bits));
 
   if (target_bits == 0) target_bits = max_bits;
+  if (max_bits_min_one) target_bits = max_bits-1;
 
   if (target_bits < min_bits || target_bits > max_bits)
   {
