@@ -7,5 +7,8 @@ all:
 profile:
 	$(CC) $(CFLAGS) -pg ga.cpp -o magics
 
+debug:
+	$(CC) $(CFLAGS) -g ga.cpp -o magics
+
 clean:
 	git clean -f

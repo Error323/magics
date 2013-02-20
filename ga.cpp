@@ -472,9 +472,10 @@ int main(int argc, char **argv)
   max_bits = 0;
   magic_seed = C64(0);
   bool max_bits_min_one = false;
+  int max_generations = 0;
 
   int c;
-  while ((c = getopt(argc, argv, "1s:t:bhm:")) != -1)
+  while ((c = getopt(argc, argv, "1s:t:g:bhm:")) != -1)
   {
     switch (c)
     {
@@ -483,6 +484,7 @@ int main(int argc, char **argv)
     case 'm': magic_seed = strtoull(optarg, 0, 0); break;
     case 'b': is_bishop = 1; break;
     case '1': max_bits_min_one = true; break;
+    case 'g': max_generations = atoi(optarg); break;
     case 'h': print_and_exit(EXIT_SUCCESS);
     case '?':
     default: print_and_exit(EXIT_FAILURE);
@@ -547,17 +549,20 @@ int main(int argc, char **argv)
 
     solution_found = solution.collisions == 0;
 
-    if (solution_found)
-      break;
-
     if (generation % 100 == 0)
       printf("G %d\tC %d\tF %0.2f\tS %d/%lu\t0x%llu\t%s\n",
              generation, solution.collisions, solution.fitness,
              solution.space_used, used_list.size(), solution.magic, cmd_line);
 
+    if (solution_found)
+      break;
+
     SelectParents(pool, parents, solution);
     GenerateOffspring(pool, parents);
     generation++;
+
+    if (generation > max_generations && max_generations > 0)
+      break;
   }
 
   if (solution_found)
