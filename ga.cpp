@@ -9,8 +9,8 @@
 #include <assert.h>
 #include <string.h>
 
-#define NUM_PARENTS 5
-#define NUM_RANDOM 1
+#define NUM_PARENTS 8
+#define NUM_RANDOM 4
 #define POPULATION_SIZE 1000
 #define CHROMO_LENGTH 64
 
