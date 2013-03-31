@@ -37,10 +37,10 @@ std::vector<U64> used_list;
 class Chromosome
 {
 public:
-  Chromosome(): magic(C64(0)), space_used(0), collisions(0), fitness(0.0f) {}
-  Chromosome(U64 m): magic(m), space_used(0), collisions(0), fitness(0.0f) {}
-  Chromosome(U64 m, int f): magic(m), space_used(0), collisions(0), fitness(f) {}
-  Chromosome(const Chromosome &c): magic(c.magic), space_used(c.space_used), collisions(c.collisions), fitness(c.fitness) {}
+  Chromosome(): magic(C64(0)), collisions(0), fitness(0.0f) {}
+  Chromosome(U64 m): magic(m), collisions(0), fitness(0.0f) {}
+  Chromosome(U64 m, int f): magic(m), collisions(0), fitness(f) {}
+  Chromosome(const Chromosome &c): magic(c.magic), collisions(c.collisions), fitness(c.fitness) {}
 
   Chromosome &operator=(const Chromosome &c)
   {
@@ -48,7 +48,6 @@ public:
     {
       magic = c.magic;
       fitness = c.fitness;
-      space_used = c.space_used;
       collisions = c.collisions;
     }
 
@@ -56,7 +55,6 @@ public:
   }
 
   U64 magic;
-  int space_used;
   int collisions;
   float fitness;
 };
@@ -303,26 +301,42 @@ void ComputeFitness(Chromosome &chromosome)
 {
   used_list.assign(used_list.size(), C64(0));
   chromosome.collisions = 0;
-  chromosome.space_used = 0;
-  int index, n;
+  int index[4], n;
 
   n = (1 << max_bits);
-  for (int i = 0; i < n; i++)
+  for (int i = 0; i < n; i+=4)
   {
-    index = transform(block_list[i], chromosome.magic);
+    index[0] = transform(block_list[i+0], chromosome.magic);
+    index[1] = transform(block_list[i+1], chromosome.magic);
+    index[2] = transform(block_list[i+2], chromosome.magic);
+    index[3] = transform(block_list[i+3], chromosome.magic);
 
-    if (used_list[index] == C64(0))
-    {
-      used_list[index] = attack_list[i];
-      chromosome.space_used++;
-    }
+    if (used_list[index[0]] == C64(0))
+      used_list[index[0]] = attack_list[i+0];
     else
-    if (used_list[index] != attack_list[i])
+    if (used_list[index[0]] != attack_list[i+0])
+      chromosome.collisions++;
+
+    if (used_list[index[1]] == C64(0))
+      used_list[index[1]] = attack_list[i+1];
+    else
+    if (used_list[index[1]] != attack_list[i+1])
+      chromosome.collisions++;
+
+    if (used_list[index[2]] == C64(0))
+      used_list[index[2]] = attack_list[i+2];
+    else
+    if (used_list[index[2]] != attack_list[i+2])
+      chromosome.collisions++;
+
+    if (used_list[index[3]] == C64(0))
+      used_list[index[3]] = attack_list[i+3];
+    else
+    if (used_list[index[3]] != attack_list[i+3])
       chromosome.collisions++;
   }
 
-  chromosome.fitness = 
-    (n - chromosome.collisions) - (1.0f/used_list.size() * chromosome.space_used);
+  chromosome.fitness = (n - chromosome.collisions);
 }
 
 void InitializePopulation(std::vector<Chromosome> &pool)
@@ -454,6 +468,7 @@ void print_and_exit(int ret)
   else
     printf(" -t\tbits to use in {%d,...,%d}\n", min_bits, max_bits);
   printf(" -b\tsearch for bishop, otherwise for rook\n");
+  printf(" -g\tmax generations\n");
   printf(" -m\tseed population with this magic number\n");
 
   exit(ret);
@@ -550,9 +565,8 @@ int main(int argc, char **argv)
     solution_found = solution.collisions == 0;
 
     if (generation % 100 == 0)
-      printf("G %d\tC %d\tF %0.2f\tS %d/%lu\t0x%llu\t%s\n",
-             generation, solution.collisions, solution.fitness,
-             solution.space_used, used_list.size(), solution.magic, cmd_line);
+      printf("G %d\tC %d\tF %0.2f\t0x%llu\t%s\n",
+             generation, solution.collisions, solution.fitness, solution.magic, cmd_line);
 
     if (solution_found)
       break;

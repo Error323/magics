@@ -1,5 +1,5 @@
 CC=g++
-CFLAGS= -O2 -Wall -Wextra
+CFLAGS= -O3 -Wall -Wextra
 
 all:
 	$(CC) $(CFLAGS) ga.cpp -o magics
