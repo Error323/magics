@@ -296,7 +296,6 @@ int transform(U64 board, const U64 magic)
 void ComputeFitness(Chromosome &chromosome)
 {
   used_list.assign(used_list.size(), C64(0));
-  chromosome.collisions = 0;
   int index, n, i;
 
   n = (1 << max_bits);
@@ -308,16 +307,13 @@ void ComputeFitness(Chromosome &chromosome)
       used_list[index] = attack_list[i];
     else
     if (used_list[index] != attack_list[i])
-    {
-      chromosome.collisions++;
       break;
-    }
   }
 
   chromosome.fitness = i;
 }
 
-int GetFitness(Chromosome &chromosome)
+void ComputeCollisions(Chromosome &chromosome)
 {
   used_list.assign(used_list.size(), C64(0));
   chromosome.collisions = 0;
@@ -355,8 +351,6 @@ int GetFitness(Chromosome &chromosome)
     if (used_list[index[3]] != attack_list[i+3])
       chromosome.collisions++;
   }
-
-  return (n - chromosome.collisions);
 }
 
 void InitializePopulation(std::vector<Chromosome> &pool)
@@ -589,12 +583,12 @@ int main(int argc, char **argv)
   {
     GetBestSolution(pool, solution);
 
+    ComputeCollisions(solution);
     solution_found = solution.collisions == 0;
 
-    int best_fitness = GetFitness(solution);
     if (generation % 100 == 0)
       printf("G %d\tC %d\tF %d\t0x%llx\t%s\n",
-             generation, solution.collisions, best_fitness, solution.magic, cmd_line);
+             generation, solution.collisions, int(solution.fitness), solution.magic, cmd_line);
 
     if (solution_found)
       break;
