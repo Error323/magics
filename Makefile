@@ -14,6 +14,4 @@ clean:
 	git clean -f
 
 dot:
-	gprof magics > profile.dat
-	gprof2dot.py -n0 -e0 -s profile.dat > profile.dot
-	xdot profile.dot
+	gprof magics | gprof2dot.py -n0 -e0 -s | dot -Tpng -o magics-profile.png
