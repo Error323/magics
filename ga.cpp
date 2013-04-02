@@ -17,7 +17,7 @@
 typedef unsigned long long U64;
 typedef unsigned char U8;
 
-#define C64(x) x##ULL
+#define C64(x) x##ull
 #define RAND_FLT()    (rand()/static_cast<float>(RAND_MAX))
 #define RAND_INT(a,b) ((rand() % ((b)-(a) + 1)) + (a))
 
@@ -113,8 +113,8 @@ void print(const U64 &inBoard)
 
 U64 R64()
 {
-  U64 r;
-  r = random();
+  U64 r = C64(0);
+  r |= random();
   r <<= 32;
   r |= random();
   return r;
@@ -128,7 +128,7 @@ U64 R64Few()
 U64 Magic(const U64 bits)
 {
   U64 shift = 64 - bits;
-  U64 magic = R64Few() & 0x3ffffffffffffff;
+  U64 magic = R64Few() & C64(0x3ffffffffffffff);
   magic |= shift << 58;
 
   return magic;
@@ -137,10 +137,7 @@ U64 Magic(const U64 bits)
 int count_1s(U64 b)
 {
   int r;
-
-  for (r = 0; b; r++, b &= b - 1)
-    ;
-
+  for (r = 0; b; r++, b &= b - 1);
   return r;
 }
 
@@ -440,7 +437,7 @@ void GenerateOffspring(std::vector<Chromosome> &pool, const std::vector<Chromoso
     child = (father.magic & father_side) | (mother.magic & ~father_side);
 
     // Mutate some bits
-    child.magic ^= R64Few() & 0x3ffffffffffffff;
+    child.magic ^= R64Few() & C64(0x3ffffffffffffff);
     
     // Compute new fitness
     ComputeFitness(child);
