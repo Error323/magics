@@ -566,8 +566,8 @@ int main(int argc, char **argv)
   Chromosome solution;
   InitializePopulation(pool);
 
-  printf("Generating magic for '%s' on square %c%d using %d <= (%d) <= %d
-          bits\n", is_bishop ? "bishop" : "rook", char(square%8+65),
+  printf("Generating magic for '%s' on square %c%d using %d <= (%d) <= %d bits\n", 
+          is_bishop ? "bishop" : "rook", char(square%8+65),
           square/8+1, min_bits, target_bits, max_bits);
 
   char cmd_line[256];
