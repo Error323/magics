@@ -113,8 +113,7 @@ void print(const U64 &inBoard)
 
 U64 R64()
 {
-  U64 r = C64(0);
-  r |= random();
+  U64 r = random();
   r <<= 32;
   r |= random();
   return r;
