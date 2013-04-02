@@ -557,7 +557,8 @@ int main(int argc, char **argv)
   for (int i = 0; i < (1 << max_bits); i++)
   {
     block_list[i] = index_to_U64(i, max_bits, mask);
-    attack_list[i] = is_bishop ? batt(square, block_list[i]) : ratt(square, block_list[i]);
+    attack_list[i] = is_bishop ? batt(square, block_list[i]) : 
+                     ratt(square, block_list[i]);
   }
 
   std::vector<Chromosome> pool(POPULATION_SIZE);
@@ -565,9 +566,9 @@ int main(int argc, char **argv)
   Chromosome solution;
   InitializePopulation(pool);
 
-  printf("Generating magic for '%s' on square %c%d using %d <= (%d) <= %d bits\n", 
-          is_bishop ? "bishop" : "rook", char(square%8+65), square/8+1,
-          min_bits, target_bits, max_bits);
+  printf("Generating magic for '%s' on square %c%d using %d <= (%d) <= %d
+          bits\n", is_bishop ? "bishop" : "rook", char(square%8+65),
+          square/8+1, min_bits, target_bits, max_bits);
 
   char cmd_line[256];
   for (int i = 0, j = 0; i < argc; i++)
@@ -588,7 +589,8 @@ int main(int argc, char **argv)
 
     if (generation % 100 == 0)
       printf("G %d\tC %d\tF %d\t0x%llx\t%s\n",
-             generation, solution.collisions, int(solution.fitness), solution.magic, cmd_line);
+             generation, solution.collisions, int(solution.fitness),
+             solution.magic, cmd_line);
 
     if (solution_found)
       break;
@@ -604,8 +606,8 @@ int main(int argc, char **argv)
   if (solution_found)
   {
     assert(target_bits == 64-(solution.magic >> 58));
-    fprintf(stderr, "0x%llxull\t%s\t %c%d\t%d\n",
-            solution.magic, is_bishop ? "bishop" : "rook",
+    fprintf(stderr, "G %d\t0x%llxull\t%s\t %c%d\t%d\n",
+            generation, solution.magic, is_bishop ? "bishop" : "rook",
             char(square%8+65), square/8+1, square);
   }
   else
