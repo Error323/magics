@@ -127,7 +127,7 @@ U64 R64Few()
 U64 Magic(const U64 bits)
 {
   U64 shift = 64 - bits;
-  U64 magic = R64Few() & C64(0x3ffffffffffffff);
+  U64 magic = R64() & C64(0x3ffffffffffffff);
   magic |= shift << 58;
 
   return magic;
@@ -297,6 +297,30 @@ void ComputeFitness(Chromosome &chromosome)
 {
   used_list.assign(used_list.size(), C64(0));
   chromosome.collisions = 0;
+  int index, n, i;
+
+  n = (1 << max_bits);
+  for (i = 0; i < n; i++)
+  {
+    index = transform(block_list[i], chromosome.magic);
+
+    if (used_list[index] == C64(0))
+      used_list[index] = attack_list[i];
+    else
+    if (used_list[index] != attack_list[i])
+    {
+      chromosome.collisions++;
+      break;
+    }
+  }
+
+  chromosome.fitness = i;
+}
+
+int GetFitness(Chromosome &chromosome)
+{
+  used_list.assign(used_list.size(), C64(0));
+  chromosome.collisions = 0;
   int index[4], n;
 
   n = (1 << max_bits);
@@ -332,7 +356,7 @@ void ComputeFitness(Chromosome &chromosome)
       chromosome.collisions++;
   }
 
-  chromosome.fitness = (n - chromosome.collisions);
+  return (n - chromosome.collisions);
 }
 
 void InitializePopulation(std::vector<Chromosome> &pool)
@@ -567,9 +591,10 @@ int main(int argc, char **argv)
 
     solution_found = solution.collisions == 0;
 
+    int best_fitness = GetFitness(solution);
     if (generation % 100 == 0)
-      printf("G %d\tC %d\tF %0.2f\t0x%llx\t%s\n",
-             generation, solution.collisions, solution.fitness, solution.magic, cmd_line);
+      printf("G %d\tC %d\tF %d\t0x%llx\t%s\n",
+             generation, solution.collisions, best_fitness, solution.magic, cmd_line);
 
     if (solution_found)
       break;
