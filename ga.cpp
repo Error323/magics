@@ -344,8 +344,15 @@ void InitializePopulation(std::vector<Chromosome> &pool)
     ComputeFitness(pool[i]);
   }
 
-  if (magic_seed != C64(0) && magic_seed >> 58 == 64-target_bits)
+  if (magic_seed != C64(0))
   {
+    U64 shift = C64(64)-target_bits;
+    if (magic_seed >> 58 != shift)
+    {
+      magic_seed &= C64(0x3ffffffffffffff);
+      magic_seed |= shift << 58;
+    }
+    
     pool[0].magic = magic_seed;
     ComputeFitness(pool[0]);
   }
