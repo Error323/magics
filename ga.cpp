@@ -346,7 +346,7 @@ void InitializePopulation(std::vector<Chromosome> &pool)
 
   if (magic_seed != C64(0))
   {
-    U64 shift = C64(64)-target_bits;
+    U64 shift = 64-target_bits;
     if (magic_seed >> 58 != shift)
     {
       magic_seed &= C64(0x3ffffffffffffff);
@@ -569,7 +569,7 @@ int main(int argc, char **argv)
     solution_found = solution.collisions == 0;
 
     if (generation % 100 == 0)
-      printf("G %d\tC %d\tF %0.2f\t0x%llu\t%s\n",
+      printf("G %d\tC %d\tF %0.2f\t0x%llx\t%s\n",
              generation, solution.collisions, solution.fitness, solution.magic, cmd_line);
 
     if (solution_found)
