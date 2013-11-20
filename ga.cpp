@@ -9,6 +9,8 @@
 #include <assert.h>
 #include <string.h>
 
+#include "timer.h"
+
 #define NUM_PARENTS 8
 #define NUM_RANDOM 4
 #define POPULATION_SIZE 1000
@@ -26,6 +28,7 @@ int square;
 int is_bishop;
 U64 mask;
 U64 magic_seed;
+U64 counter = 0;
 unsigned int target_bits;
 unsigned int max_bits;
 unsigned int min_bits;
@@ -295,40 +298,20 @@ int transform(U64 board, const U64 magic)
 
 void ComputeFitness(Chromosome &chromosome)
 {
+  counter++;
   used_list.assign(used_list.size(), C64(0));
   chromosome.collisions = 0;
-  int index[4], n;
+  int index, n;
 
   n = (1 << max_bits);
-  for (int i = 0; i < n; i+=4)
+  for (int i = 0; i < n; i++)
   {
-    index[0] = transform(block_list[i+0], chromosome.magic);
-    index[1] = transform(block_list[i+1], chromosome.magic);
-    index[2] = transform(block_list[i+2], chromosome.magic);
-    index[3] = transform(block_list[i+3], chromosome.magic);
+    index = transform(block_list[i], chromosome.magic);
 
-    if (used_list[index[0]] == C64(0))
-      used_list[index[0]] = attack_list[i+0];
+    if (used_list[index] == C64(0))
+      used_list[index] = attack_list[i];
     else
-    if (used_list[index[0]] != attack_list[i+0])
-      chromosome.collisions++;
-
-    if (used_list[index[1]] == C64(0))
-      used_list[index[1]] = attack_list[i+1];
-    else
-    if (used_list[index[1]] != attack_list[i+1])
-      chromosome.collisions++;
-
-    if (used_list[index[2]] == C64(0))
-      used_list[index[2]] = attack_list[i+2];
-    else
-    if (used_list[index[2]] != attack_list[i+2])
-      chromosome.collisions++;
-
-    if (used_list[index[3]] == C64(0))
-      used_list[index[3]] = attack_list[i+3];
-    else
-    if (used_list[index[3]] != attack_list[i+3])
+    if (used_list[index] != attack_list[i])
       chromosome.collisions++;
   }
 
@@ -360,7 +343,7 @@ void InitializePopulation(std::vector<Chromosome> &pool)
 void GetBestSolution(std::vector<Chromosome> &pool, Chromosome &solution)
 {
   fitness_sum = 0.0f;
-  float best = 0;
+  float best = 0.0f;
   for (int i = 0; i < POPULATION_SIZE; i++)
   {
     fitness_sum += pool[i].fitness;
@@ -561,15 +544,27 @@ int main(int argc, char **argv)
   int generation = 0;
   stopped = false;
   bool solution_found = false;
+  double start_time = timer::GetRealTime();
+  char unit[4] = {'K','M','G','T'};
   while (!stopped)
   {
     GetBestSolution(pool, solution);
 
     solution_found = solution.collisions == 0;
 
-    if (generation % 100 == 0)
-      printf("G %d\tC %d\tF %0.2f\t0x%llx\t%s\n",
-             generation, solution.collisions, solution.fitness, solution.magic, cmd_line);
+    if (generation > 0 && generation % 100 == 0)
+    {
+      double time = timer::GetRealTime() - start_time;
+      double mps = counter / time;
+      int u = floor(log10(mps)) / 3;
+      u = std::max(std::min(u, 4), 1);
+      mps /= pow(10, u*3);
+      printf("G %d\tC %d\tF %0.2f\tS %0.2f%c m/s\t%s\n",
+             generation, solution.collisions, solution.fitness, mps, unit[u-1],
+             cmd_line);
+      start_time += time;
+      counter = 0;
+    }
 
     if (solution_found)
       break;

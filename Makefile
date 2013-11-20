@@ -2,7 +2,7 @@ CC=g++
 CFLAGS= -O3 -Wall -Wextra
 
 all:
-	$(CC) $(CFLAGS) ga.cpp -o magics
+	$(CC) $(CFLAGS) ga.cpp -o magics -lrt
 
 profile:
 	$(CC) $(CFLAGS) -pg -g -fno-omit-frame-pointer -fno-inline-functions -fno-optimize-sibling-calls ga.cpp -o magics
