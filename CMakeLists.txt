@@ -1,0 +1,57 @@
+project (magics CXX C)
+cmake_minimum_required (VERSION 2.8)
+
+#-------------------------------------------------------------------------------
+# General Settings
+#-------------------------------------------------------------------------------
+set (CMAKE_CXX_FLAGS "-Wall -Wextra")
+set (CMAKE_CXX_FLAGS_DEBUG "-O0 -g")
+set (CMAKE_CXX_FLAGS_RELEASE "-O3 -march=native -DNDEBUG -DQT_NO_DEBUG")
+set (CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O2 -g")
+
+option (ENABLE_CUDA "Enable/disable cuda" ON)
+
+if (NOT CMAKE_BUILD_TYPE)
+  set (CMAKE_BUILD_TYPE "Release")
+endif (NOT CMAKE_BUILD_TYPE)
+
+if (ENABLE_CUDA)
+  find_package (CUDA)
+  add_definitions(-DENABLE_CUDA)
+endif (ENABLE_CUDA)
+
+#-------------------------------------------------------------------------------
+# Include sources
+#-------------------------------------------------------------------------------
+set(SOURCES 
+  src/ga.cpp
+  src/timer.h
+)
+
+#-------------------------------------------------------------------------------
+# Define executable and link libraries
+#-------------------------------------------------------------------------------
+if (CUDA_FOUND)
+  cuda_add_executable (${CMAKE_PROJECT_NAME} ${SOURCES} OPTIONS -arch=sm_30)
+else (CUDA_FOUND)
+  add_executable (${CMAKE_PROJECT_NAME} ${SOURCES})
+endif (CUDA_FOUND)
+
+target_link_libraries (${CMAKE_PROJECT_NAME}
+  rt
+)
+
+#-------------------------------------------------------------------------------
+# Status report
+#-------------------------------------------------------------------------------
+message (STATUS "")
+message (STATUS " C/C++:")
+message (STATUS "   C++ Compiler:               ${CMAKE_CXX_COMPILER}")
+message (STATUS "   C++ flags (Release):        ${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_RELEASE}")
+message (STATUS "   C++ flags (Debug):          ${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_DEBUG}")
+message (STATUS "   C++ flags (RelWithDebInfo): ${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_RELWITHDEBINFO}")
+message (STATUS "")
+message (STATUS " CMakeflags (${CMAKE_PROJECT_NAME}):")
+message (STATUS "   CMAKE_BUILD_TYPE            ${CMAKE_BUILD_TYPE}")
+message (STATUS "   ENABLE_CUDA                 ${ENABLE_CUDA}")
+message (STATUS "")
