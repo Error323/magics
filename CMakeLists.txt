@@ -17,13 +17,12 @@ endif (NOT CMAKE_BUILD_TYPE)
 
 if (ENABLE_CUDA)
   find_package (CUDA)
-  add_definitions(-DENABLE_CUDA)
 endif (ENABLE_CUDA)
 
 #-------------------------------------------------------------------------------
 # Include sources
 #-------------------------------------------------------------------------------
-set(SOURCES 
+set (SOURCES 
   src/ga.cpp
   src/timer.h
 )
@@ -32,9 +31,11 @@ set(SOURCES
 # Define executable and link libraries
 #-------------------------------------------------------------------------------
 if (CUDA_FOUND)
+  add_definitions(-DENABLE_CUDA)
   cuda_add_executable (${CMAKE_PROJECT_NAME} ${SOURCES} OPTIONS -arch=sm_30)
 else (CUDA_FOUND)
   add_executable (${CMAKE_PROJECT_NAME} ${SOURCES})
+  set (ENABLE_CUDA OFF)
 endif (CUDA_FOUND)
 
 target_link_libraries (${CMAKE_PROJECT_NAME}
