@@ -22,24 +22,35 @@ endif (ENABLE_CUDA)
 #-------------------------------------------------------------------------------
 # Include sources
 #-------------------------------------------------------------------------------
-set (SOURCES 
-  src/ga.cpp
+set (SOURCES_CPU
   src/timer.h
+  src/ga.cpp
   src/random.c
+)
+
+set (SOURCES_GPU
+  src/timer.h
+  src/Verbose.cpp
+  src/main.cpp
+  src/cuda/init.h
+  src/cuda/init.cu
 )
 
 #-------------------------------------------------------------------------------
 # Define executable and link libraries
 #-------------------------------------------------------------------------------
 if (CUDA_FOUND)
-  add_definitions(-DENABLE_CUDA)
-  cuda_add_executable (${CMAKE_PROJECT_NAME} ${SOURCES} OPTIONS -arch=sm_30)
-else (CUDA_FOUND)
-  add_executable (${CMAKE_PROJECT_NAME} ${SOURCES})
-  set (ENABLE_CUDA OFF)
+  include_directories("/usr/local/cuda/include")
+  link_directories("/usr/local/cuda/lib64")
+  cuda_add_executable (${CMAKE_PROJECT_NAME}-gpu ${SOURCES_GPU} OPTIONS -arch=sm_30)
+  target_link_libraries (${CMAKE_PROJECT_NAME}-gpu
+    rt
+    curand
+  )
 endif (CUDA_FOUND)
 
-target_link_libraries (${CMAKE_PROJECT_NAME}
+add_executable (${CMAKE_PROJECT_NAME}-cpu ${SOURCES_CPU})
+target_link_libraries (${CMAKE_PROJECT_NAME}-cpu
   rt
 )
 
