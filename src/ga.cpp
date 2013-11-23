@@ -10,6 +10,9 @@
 #include <string.h>
 
 #include "timer.h"
+#include "random.c"
+
+extern uint64_t Rand64(void);
 
 #define NUM_PARENTS 8
 #define NUM_RANDOM 1
@@ -116,10 +119,7 @@ void print(const U64 &inBoard)
 
 U64 R64()
 {
-  U64 r = random();
-  r <<= 32;
-  r |= random();
-  return r;
+  return Rand64();
 }
 
 U64 R64Few()
@@ -318,12 +318,18 @@ void ComputeFitness(Chromosome &chromosome)
   chromosome.fitness = (n - chromosome.collisions);
 }
 
-void InitializePopulation(std::vector<Chromosome> &pool)
+void InitializePopulation(std::vector<Chromosome> &pool, Chromosome &solution)
 {
+  float best = 0.0f;
   for (int i = 0; i < POPULATION_SIZE; i++)
   {
     pool[i].magic = Magic(target_bits);
     ComputeFitness(pool[i]);
+    if (pool[i].fitness > best)
+    {
+      best = pool[i].fitness;
+      solution = pool[i];
+    }
   }
 
   if (magic_seed != C64(0))
@@ -337,21 +343,8 @@ void InitializePopulation(std::vector<Chromosome> &pool)
     
     pool[0].magic = magic_seed;
     ComputeFitness(pool[0]);
-  }
-}
-
-void GetBestSolution(std::vector<Chromosome> &pool, Chromosome &solution)
-{
-  fitness_sum = 0.0f;
-  float best = 0.0f;
-  for (int i = 0; i < POPULATION_SIZE; i++)
-  {
-    fitness_sum += pool[i].fitness;
-    if (pool[i].fitness > best)
-    {
-      best = pool[i].fitness;
-      solution = pool[i];
-    }
+    if (pool[0].fitness > best)
+      solution = pool[0];
   }
 }
 
@@ -402,11 +395,21 @@ void SelectParents(const std::vector<Chromosome> &pool, std::vector<Chromosome> 
   }
 }
 
-void GenerateOffspring(std::vector<Chromosome> &pool, const std::vector<Chromosome> &parents)
+void GenerateOffspring(std::vector<Chromosome> &pool, const std::vector<Chromosome> &parents, Chromosome &solution)
 {
   // Put first <n> best parents in new pool
+  fitness_sum = 0.0f;
+  float best = 0.0f;
   for (int i = 0; i < NUM_PARENTS - NUM_RANDOM; i++)
+  {
     pool[i] = parents[i];
+    fitness_sum += pool[i].fitness;
+    if (pool[i].fitness > best)
+    {
+      best = pool[i].fitness;
+      solution = pool[i];
+    }
+  }
 
   // Create offspring
   for (int i = NUM_PARENTS - NUM_RANDOM; i < POPULATION_SIZE; i++)
@@ -430,6 +433,12 @@ void GenerateOffspring(std::vector<Chromosome> &pool, const std::vector<Chromoso
     
     // Compute new fitness
     ComputeFitness(child);
+    fitness_sum += child.fitness;
+    if (child.fitness > best)
+    {
+      best = child.fitness;
+      solution = child;
+    }
   }
 }
 
@@ -528,7 +537,7 @@ int main(int argc, char **argv)
   std::vector<Chromosome> pool(POPULATION_SIZE);
   std::vector<Chromosome> parents(NUM_PARENTS);
   Chromosome solution;
-  InitializePopulation(pool);
+  InitializePopulation(pool, solution);
 
   printf("Generating magic for '%s' on square %c%d using %d <= (%d) <= %d bits\n", 
           is_bishop ? "bishop" : "rook", char(square%8+65), square/8+1,
@@ -548,13 +557,11 @@ int main(int argc, char **argv)
   char unit[4] = {'K','M','G','T'};
   while (!stopped)
   {
-    GetBestSolution(pool, solution);
-
     solution_found = solution.collisions == 0;
 
-    if (generation > 0 && generation % 100 == 0)
+    double time = timer::GetRealTime() - start_time;
+    if (time > 5)
     {
-      double time = timer::GetRealTime() - start_time;
       double mps = counter / time;
       int u = floor(log10(mps)) / 3;
       u = std::max(std::min(u, 4), 1);
@@ -570,7 +577,7 @@ int main(int argc, char **argv)
       break;
 
     SelectParents(pool, parents, solution);
-    GenerateOffspring(pool, parents);
+    GenerateOffspring(pool, parents, solution);
     generation++;
 
     if (generation > max_generations && max_generations > 0)

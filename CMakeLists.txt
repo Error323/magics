@@ -25,6 +25,7 @@ endif (ENABLE_CUDA)
 set (SOURCES 
   src/ga.cpp
   src/timer.h
+  src/random.c
 )
 
 #-------------------------------------------------------------------------------
