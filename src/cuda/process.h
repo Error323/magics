@@ -1,36 +1,28 @@
-#ifndef GAMMA_CORRECT_CUH
-#define GAMMA_CORRECT_CUH
+#ifndef PROCESS_CUH
+#define PROCESS_CUH
 
 #include <cuda_runtime_api.h>
+#include <curand.h>
+
+#define NUM_PARENTS 10
+#define BLOCK_DIM_1D 32
+#define THREAD_DIM_1D 32
+#define SEED 0x3ad830cull
+#define POOL_SIZE 1024
+#define C64(x) x##ull
+
+typedef unsigned long long U64;
+typedef unsigned int U32;
+typedef unsigned char U8;
 
 namespace gpu
 {
-__device__ float sinc(float x);
-__device__ float L(float x);
-
-__global__ void transpose(uchar4 *odata,
-                          uchar4 *idata,
-                          int width,
-                          int height);
-
-__global__ void gamma(uchar4 *src,
-                      uchar4 *dst,
-                      float g,
-                      int n);
-
-__global__ void lanczos(uchar4 *src,
-                        uchar4 *dst,
-                        int nSrc,
-                        int nDst,
-                        float factor,
-                        float scale,
-                        float support);
-
-bool process(uchar4 *src,
-             const int srcSize,
-             uchar4 *dst,
-             const int dstSize,
-             const float g);
+__device__ int Transform(U64 board, const U64 magic);
+__global__ void InitPool(U64 *magics, U64 *randoms, int target_bits);
+__global__ void ComputeFitness(U64 *magics, int *fitness, U64 *used_list, U64 *solution, int *sum, int n, int m);
+__global__ void SelectParents(U64 *magics, int *fitness, int *sum, U64 *parents, U32 *randoms);
+__global__ void CreateOffspring(U64 *magics, U64 *parents, U64 *rand);
+bool process(int target_bits, int max_bits, const U64 *block, const U64 *attack);
 }
 
-#endif // GAMMA_CORRECT_CUH
+#endif // PROCESS_CUH

@@ -1,184 +1,213 @@
 #include "process.h"
 #include "init.h"
 #include "../Verbose.hpp"
-#include "../Debugger.hpp"
-#include "../../crawler/Constants.hpp"
+#include "../timer.h"
 
 #include <math.h>
 #include <math_constants.h>
 
-#define BLOCK_DIM_2D 16
-#define MAX_SCALE 64.0f
-#define MAX_KERNEL_SIZE int(MAX_SCALE*LANCZOS_WIDTH*2.0f)
+// Algorithmic description:
+// 1. initialize pool
+//
+// loop until fitness is good enough:
+//   1. compute fitness for each chromosome
+//   2. select N best parents
+//   3. create new pool with children from N parents
 
 namespace gpu
 {
-int iDivUp(int a, int b)
+__constant__ U64 block_list[4096];
+__constant__ U64 attack_list[4096];
+
+__device__ int Transform(U64 board, const U64 magic)
 {
-  return (a % b != 0) ? (a / b + 1) : (a / b);
+  board *= magic;
+  board >>= (magic >> 58);
+  return (int) board;
 }
 
-__device__ float sinc(float x)
+__global__ void InitPool(U64 *magics, U64 *randoms, int target_bits)
 {
-  x *= CUDART_PI_F;
-  return sinf(x) / x;
-}
+  int id = blockIdx.x * THREAD_DIM_1D + threadIdx.x;
 
-__device__ float L(float x)
-{
-  if (x == 0.0f)
-    return 1.0f;
-
-  return sinc(x) * sinc(x/LANCZOS_WIDTH);
-}
-
-__device__ float4 rgba2float(uchar4 p)
-{
-  float4 rgba;
-  rgba.x = p.x / 255.0f;
-  rgba.y = p.y / 255.0f;
-  rgba.z = p.z / 255.0f;
-  rgba.w = p.w / 255.0f;
-  return rgba;
-}
-
-__device__ uchar4 pixel(float4 p)
-{
-  uchar4 rgba;
-  rgba.x = min(max(p.x, 0.0f), 255.0f) + 0.5f;
-  rgba.y = min(max(p.y, 0.0f), 255.0f) + 0.5f;
-  rgba.z = min(max(p.z, 0.0f), 255.0f) + 0.5f;
-  rgba.w = 255;
-  return rgba;
-}
-
-__device__ uchar4 float2rgba(float4 p)
-{
-  uchar4 rgba;
-  rgba.x = __saturatef(p.x) * 255.0f;
-  rgba.y = __saturatef(p.y) * 255.0f;
-  rgba.z = __saturatef(p.z) * 255.0f;
-  rgba.w = __saturatef(p.w) * 255.0f;
-  return rgba;
-}
-
-
-
-__global__ void gamma(uchar4 *src, uchar4 *dst, float g, int n)
-{
-  int x_i = blockIdx.x * BLOCK_DIM_2D + threadIdx.x;
-  int y_i = blockIdx.y * BLOCK_DIM_2D + threadIdx.y;
-
-  if (x_i >= n || y_i >= n)
+  if (id >= POOL_SIZE)
     return;
 
-  int index = y_i*n + x_i;
-  float4 pixel = rgba2float(src[index]);
-  pixel.x = powf(pixel.x, g);
-  pixel.y = powf(pixel.y, g);
-  pixel.z = powf(pixel.z, g);
-  dst[index] = float2rgba(pixel);
+  U64 magic = randoms[id] & randoms[id+POOL_SIZE] & randoms[id+POOL_SIZE*2] & C64(0x3ffffffffffffff);
+  U64 shift = 64 - target_bits;
+  magic |= shift << 58;
+  magics[id] = magic;
 }
 
-
-
-__global__ void lanczos(uchar4 *src, uchar4 *dst, int nSrc, int nDst, float factor, float scale, float support)
+__global__ void ComputeFitness(U64 *magics, int *fitness, U64 *used_list, U64 *solution, int *sum, int n, int m)
 {
-  int x = blockIdx.x*BLOCK_DIM_2D + threadIdx.x;
-  int y = blockIdx.y*BLOCK_DIM_2D + threadIdx.y;
+  int id = blockIdx.x * THREAD_DIM_1D + threadIdx.x;
 
-  if (x >= nDst || y >= nDst)
+  if (id >= POOL_SIZE)
     return;
 
-  float center_y = (y + 0.5f) * scale;
-  float center_x = (x + 0.5f) * scale;
-  int start_y = max(int(center_y-support+0.5f), 0);
-  int start_x = max(int(center_x-support+0.5f), 0);
-  int stop_y  = min(int(center_y+support+0.5f), nSrc);
-  int stop_x  = min(int(center_x+support+0.5f), nSrc);
-  int n_y = stop_y - start_y;
-  int n_x = stop_x - start_x;
+  U64 magic = magics[id];
+  U64 used;
+  int collisions = 0;
+  int start = id*m;
+  int index;
+  int f;
 
-  // compute kernels
-  float kernel_x[MAX_KERNEL_SIZE];
-  float kernel_y[MAX_KERNEL_SIZE];
-
-  float density = 0.0f;
-  for (int i = 0; i < n_y; i++)
+  for (int i = 0; i < n; i++)
   {
-    float phase = start_y + i - center_y + 0.5f;
-    density += kernel_y[i] = L(factor*phase);
+    index = Transform(block_list[i], magic);
+    used = used_list[start + index];
+
+    if (used == C64(0))
+      used_list[start + index] = attack_list[i];
+    else
+    if (used != attack_list[i])
+      collisions++;
   }
-  for (int i = 0; i < n_y; i++)
-    kernel_y[i] /= density;
 
-  density = 0.0f;
-  for (int i = 0; i < n_x; i++)
-  {
-    float phase = start_x + i - center_x + 0.5f;
-    density += kernel_x[i] = L(factor*phase);
-  }
-  for (int i = 0; i < n_x; i++)
-    kernel_x[i] /= density;
+  // we found a perfect solution
+  if (collisions == 0)
+    atomicExch(solution, magic);
 
-  // apply kernels and store result in resized image
-  float4 p = make_float4(0.0f, 0.0f, 0.0f, 0.0f);
-  uchar4 rgba;
-  float lanczos_xy;
-  for (int i = 0; i < n_y; i++)
+  // compute the sum of all the fitness
+  f = n - collisions;
+  atomicAdd(sum, f);
+  fitness[id] = f;
+}
+
+__global__ void SelectParents(U64 *magics, int *fitness, int *sum, U64 *parents, U32 *randoms)
+{
+  int pid = threadIdx.x;
+  int r   = randoms[pid] % (*sum);
+  int s   = fitness[0];
+  for (int i = 1; i < POOL_SIZE; i++)
   {
-    for (int j = 0; j < n_x; j++)
+    if (r < s)
     {
-      lanczos_xy = kernel_y[i] * kernel_x[j];
-      rgba = src[(i+start_y)*nSrc+(j+start_x)];
-      p.x += lanczos_xy * rgba.x;
-      p.y += lanczos_xy * rgba.y;
-      p.z += lanczos_xy * rgba.z;
+      parents[pid] = magics[i-1];
+      break;
     }
+    s += fitness[i];
   }
-  dst[y*nDst+x] = pixel(p);
 }
 
-
-
-bool process(uchar4 *src, const int srcSize,
-             uchar4 *dst, const int dstSize,
-             const float g)
+__global__ void CreateOffspring(U64 *magics, U64 *parents, U64 *rand)
 {
-  size_t src_mem = srcSize*srcSize*sizeof(uchar4);
-  size_t dst_mem = dstSize*dstSize*sizeof(uchar4);
-  if (src_mem+dst_mem > gpu::freeMemory())
-    return false;
+  int id = blockIdx.x * THREAD_DIM_1D + threadIdx.x;
 
-  float factor  = dstSize / float(srcSize);
-  float scale   = 1.0f / factor;
-  float support = scale * LANCZOS_WIDTH;
+  if (id >= POOL_SIZE)
+    return;
 
-  if (scale > MAX_SCALE)
-    return false;
+  U64 child;
+  U64 r1 = rand[id];
+  U64 r2 = rand[id+POOL_SIZE];
+  U64 r3 = rand[id+2*POOL_SIZE];
+  U64 father = parents[r1 % NUM_PARENTS];
+  U64 mother = parents[r2 % NUM_PARENTS];
+  int crossover = r3 % 64;
+  U64 father_side = (C64(1) << crossover) - 1;
+  child = (father & father_side) | (mother & ~father_side);
+  child ^= (r1 & r2 & r3 & C64(0x3ffffffffffffff));
+  magics[id] = child;
+}
 
-  Debug("[gpu]");
-  dim3 blocks, threads;
-  uchar4 *d_src, *d_dst;
-  cudaSafeCall(cudaMalloc((void**)&d_src, src_mem));
-  cudaSafeCall(cudaMalloc((void**)&d_dst, dst_mem));
-  cudaSafeCall(cudaMemcpy(d_src, src, src_mem, cudaMemcpyHostToDevice));
+bool process(int target_bits, int max_bits, const U64 *block, const U64 *attack)
+{
+  int n = 1 << max_bits;
+  int m = 1 << target_bits;
 
-  blocks  = dim3(iDivUp(srcSize, BLOCK_DIM_2D), iDivUp(srcSize, BLOCK_DIM_2D));
-  threads = dim3(BLOCK_DIM_2D, BLOCK_DIM_2D);
-  gamma<<<blocks, threads>>>(d_src, d_src, g, srcSize);
+  // Store block and attack list in constant memory on device
+  cudaSafeCall(cudaMemcpyToSymbol(block_list, block, sizeof(U64)*n));
+  cudaSafeCall(cudaMemcpyToSymbol(attack_list, attack, sizeof(U64)*n));
 
-  blocks  = dim3(iDivUp(dstSize, BLOCK_DIM_2D), iDivUp(dstSize, BLOCK_DIM_2D));
-  threads = dim3(BLOCK_DIM_2D, BLOCK_DIM_2D);
-  lanczos<<<blocks, threads>>>(d_src, d_dst, srcSize, dstSize, factor, scale, support);
+  // Create random number generator
+  curandGenerator_t rnd_gen;
+  curandCreateGenerator(&rnd_gen, CURAND_RNG_PSEUDO_MTGP32);
+  curandSetPseudoRandomGeneratorSeed(rnd_gen, SEED);
 
-  blocks  = dim3(iDivUp(dstSize, BLOCK_DIM_2D), iDivUp(dstSize, BLOCK_DIM_2D));
-  threads = dim3(BLOCK_DIM_2D, BLOCK_DIM_2D);
-  gamma<<<blocks, threads>>>(d_dst, d_dst, 1.0f/g, dstSize);
+  // Generate random numbers for the pool
+  U64 *d_rand;
+  cudaSafeCall(cudaMalloc((void**)&d_rand, POOL_SIZE*3*sizeof(U64)));
+  curandGenerate(rnd_gen, (U32*)d_rand, POOL_SIZE*3*2);
+  cudaSafeCall(cudaDeviceSynchronize());
 
-  cudaSafeCall(cudaMemcpy(dst, d_dst, dst_mem, cudaMemcpyDeviceToHost));
-  cudaSafeCall(cudaFree(d_src));
-  cudaSafeCall(cudaFree(d_dst));
+  // Allocate all required memory
+  U64 *d_magics;
+  U64 *d_used, *d_solution;
+  int *d_fitness, *d_sum;
+  U64 *d_parents;
+  U32 *d_randoms;
+  cudaSafeCall(cudaMalloc((void**)&d_magics, POOL_SIZE*sizeof(U64)));
+  cudaSafeCall(cudaMalloc((void**)&d_fitness, POOL_SIZE*sizeof(int)));
+  cudaSafeCall(cudaMalloc((void**)&d_sum, sizeof(int)));
+  cudaSafeCall(cudaMalloc((void**)&d_used, POOL_SIZE*m*sizeof(U64)));
+  cudaSafeCall(cudaMalloc((void**)&d_solution, sizeof(U64)));
+  cudaSafeCall(cudaMalloc((void**)&d_parents, NUM_PARENTS*sizeof(U64)));
+  cudaSafeCall(cudaMalloc((void**)&d_randoms, NUM_PARENTS*sizeof(U32)));
+
+  U64 solution;
+  // Initialize the pool
+  InitPool<<<BLOCK_DIM_1D, THREAD_DIM_1D>>>(d_magics, d_rand, target_bits);
+  U32 generation = 0;
+  U32 counter = 0;
+
+  double start_time = timer::GetRealTime();
+  char unit[4] = {'K','M','G','T'};
+  int sum;
+  cudaSafeCall(cudaMemset(d_solution, C64(0), sizeof(U64)));
+  while (generation < 100000)
+  {
+    double time = timer::GetRealTime() - start_time;
+    if (time > 5)
+    {
+      double mps = counter / time;
+      int u = floor(log10(mps)) / 3;
+      u = std::max(std::min(u, 4), 1);
+      mps /= pow(10, u*3);
+      printf("G %d\tS %0.2f%c m/s\n", generation, mps, unit[u-1]);
+      start_time += time;
+      counter = 0;
+    }
+
+    // Compute fitness
+    cudaSafeCall(cudaMemset(d_used, C64(0), POOL_SIZE*m*sizeof(U64)));
+    cudaSafeCall(cudaMemset(d_sum, 0, sizeof(int)));
+    ComputeFitness<<<BLOCK_DIM_1D, THREAD_DIM_1D>>>(d_magics, d_fitness, d_used, d_solution, d_sum, n, m);
+    
+    // Check for solution
+    cudaSafeCall(cudaMemcpy(&solution, d_solution, sizeof(U64), cudaMemcpyDeviceToHost));
+    if (solution != C64(0))
+    {
+      fprintf(stderr, "Solution found: 0x%llxull\n", solution);
+      break;
+    }
+
+    // Select best <N> parents
+    curandGenerate(rnd_gen, d_randoms, NUM_PARENTS);
+    cudaSafeCall(cudaDeviceSynchronize());
+    SelectParents<<<1, NUM_PARENTS>>>(d_magics, d_fitness, d_sum, d_parents, d_randoms);
+
+    // Create offspring
+    curandGenerate(rnd_gen, (U32*)d_rand, POOL_SIZE*3*2);
+    cudaSafeCall(cudaDeviceSynchronize());
+    CreateOffspring<<<BLOCK_DIM_1D, THREAD_DIM_1D>>>(d_magics, d_parents, d_rand);
+
+    generation++;
+    counter += POOL_SIZE;
+  }
+
+  
+  // Free allocated cuda memory
+  curandDestroyGenerator(rnd_gen);
+  cudaSafeCall(cudaFree(d_rand));
+  cudaSafeCall(cudaFree(d_magics));
+  cudaSafeCall(cudaFree(d_used));
+  cudaSafeCall(cudaFree(d_fitness));
+  cudaSafeCall(cudaFree(d_sum));
+  cudaSafeCall(cudaFree(d_solution));
+  cudaSafeCall(cudaFree(d_randoms));
+  cudaSafeCall(cudaFree(d_parents));
+  cudaSafeCall(cudaDeviceReset());
 
   return true;
 }

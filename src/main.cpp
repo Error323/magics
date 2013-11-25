@@ -12,6 +12,7 @@
 #include "timer.h"
 #include "Verbose.hpp"
 #include "cuda/init.h"
+#include "cuda/process.h"
 
 typedef unsigned long long U64;
 typedef unsigned char U8;
@@ -242,7 +243,6 @@ void print_and_exit(int ret)
   else
     printf(" -t\tbits to use in {%d,...,%d}\n", min_bits, max_bits);
   printf(" -b\tsearch for bishop, otherwise for rook\n");
-  printf(" -g\tmax generations\n");
 
   exit(ret);
 }
@@ -258,10 +258,9 @@ int main(int argc, char **argv)
   min_bits = 0;
   max_bits = 0;
   bool max_bits_min_one = false;
-  int max_generations = 0;
 
   int c;
-  while ((c = getopt(argc, argv, "1s:t:g:bh")) != -1)
+  while ((c = getopt(argc, argv, "1s:t:bh")) != -1)
   {
     switch (c)
     {
@@ -269,7 +268,6 @@ int main(int argc, char **argv)
     case 't': target_bits = atoi(optarg); break;
     case 'b': is_bishop = 1; break;
     case '1': max_bits_min_one = true; break;
-    case 'g': max_generations = atoi(optarg); break;
     case 'h': print_and_exit(EXIT_SUCCESS);
     case '?':
     default: print_and_exit(EXIT_FAILURE);
@@ -315,49 +313,7 @@ int main(int argc, char **argv)
           is_bishop ? "bishop" : "rook", char(square%8+65), square/8+1,
           min_bits, target_bits, max_bits);
 
-  int generation = 0;
-  stopped = false;
-  bool solution_found = false;
-  double start_time = timer::GetRealTime();
-  char unit[4] = {'K','M','G','T'};
-  int counter = 0;
-  while (!stopped)
-  {
-    double time = timer::GetRealTime() - start_time;
-    if (time > 5)
-    {
-      double mps = counter / time;
-      int u = floor(log10(mps)) / 3;
-      u = std::max(std::min(u, 4), 1);
-      mps /= pow(10, u*3);
-      printf("G %d\tC %d\tF %0.2f\tS %0.2f%c m/s\n",
-             generation, 0, 0.0f, mps, unit[u-1]);
-      start_time += time;
-      counter = 0;
-    }
-
-    if (solution_found)
-      break;
-
-    if (generation > max_generations && max_generations > 0)
-      break;
-
-    generation++;
-  }
-
-  if (solution_found)
-  {
-    //assert(target_bits == 64-(solution.magic >> 58));
-    //fprintf(stderr, "0x%llxull\t%s\t %c%d\t%d\n",
-    //        solution.magic, is_bishop ? "bishop" : "rook",
-    //        char(square%8+65), square/8+1, square);
-  }
-  else
-  {
-    fprintf(stderr, "FAIL\t%s\t %c%d\t%d\n",
-            is_bishop ? "bishop" : "rook",
-            char(square%8+65), square/8+1, square);
-  }
+  gpu::process(target_bits, max_bits, &block_list[0], &attack_list[0]);
 
   return EXIT_SUCCESS;
 }

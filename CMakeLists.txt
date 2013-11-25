@@ -34,6 +34,8 @@ set (SOURCES_GPU
   src/main.cpp
   src/cuda/init.h
   src/cuda/init.cu
+  src/cuda/process.h
+  src/cuda/process.cu
 )
 
 #-------------------------------------------------------------------------------
@@ -42,7 +44,8 @@ set (SOURCES_GPU
 if (CUDA_FOUND)
   include_directories("/usr/local/cuda/include")
   link_directories("/usr/local/cuda/lib64")
-  cuda_add_executable (${CMAKE_PROJECT_NAME}-gpu ${SOURCES_GPU} OPTIONS -arch=sm_30)
+  set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS} -gencode arch=compute_30,code=sm_30 -O3 -Xptxas=-v)
+  cuda_add_executable (${CMAKE_PROJECT_NAME}-gpu ${SOURCES_GPU})
   target_link_libraries (${CMAKE_PROJECT_NAME}-gpu
     rt
     curand
