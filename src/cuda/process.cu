@@ -92,7 +92,7 @@ __global__ void SelectParents(U64 *magics, int *fitness, int *sum, U64 *parents,
   }
 }
 
-__global__ void CreateOffspring(U64 *magics, U64 *parents, U64 *rand)
+__global__ void CreateOffspring(U64 *magics, U64 *parents, U64 *rand64)
 {
   int id = blockIdx.x * THREAD_DIM_1D + threadIdx.x;
 
@@ -100,9 +100,9 @@ __global__ void CreateOffspring(U64 *magics, U64 *parents, U64 *rand)
     return;
 
   U64 child;
-  U64 r1 = rand[id];
-  U64 r2 = rand[id+POOL_SIZE];
-  U64 r3 = rand[id+2*POOL_SIZE];
+  U64 r1 = rand64[id];
+  U64 r2 = rand64[id+POOL_SIZE];
+  U64 r3 = rand64[id+2*POOL_SIZE];
   U64 father = parents[r1 % NUM_PARENTS];
   U64 mother = parents[r2 % NUM_PARENTS];
   int crossover = r3 % 64;
@@ -124,7 +124,7 @@ bool process(int target_bits, int max_bits, const U64 *block, const U64 *attack)
   // Create random number generator
   curandGenerator_t rnd_gen;
   curandCreateGenerator(&rnd_gen, CURAND_RNG_PSEUDO_MTGP32);
-  curandSetPseudoRandomGeneratorSeed(rnd_gen, SEED);
+  curandSetPseudoRandomGeneratorSeed(rnd_gen, time(0));
 
   // Generate random numbers for the pool
   U64 *d_rand64;
@@ -137,7 +137,7 @@ bool process(int target_bits, int max_bits, const U64 *block, const U64 *attack)
   U64 *d_used, *d_solution;
   int *d_fitness, *d_sum;
   U64 *d_parents;
-  U32 *d_rands32 = (U32*) d_rand64;
+  U32 *d_rand32 = (U32*) d_rand64;
   cudaSafeCall(cudaMalloc((void**)&d_magics, POOL_SIZE*sizeof(U64)));
   cudaSafeCall(cudaMalloc((void**)&d_fitness, POOL_SIZE*sizeof(int)));
   cudaSafeCall(cudaMalloc((void**)&d_sum, sizeof(int)));
@@ -146,16 +146,20 @@ bool process(int target_bits, int max_bits, const U64 *block, const U64 *attack)
   cudaSafeCall(cudaMalloc((void**)&d_parents, NUM_PARENTS*sizeof(U64)));
 
   U64 solution = C64(0);
-  // Initialize the pool
-  InitPool<<<BLOCK_DIM_1D, THREAD_DIM_1D>>>(d_magics, d_rand64, target_bits);
   U32 generation = 0;
   U32 counter = 0;
 
   double start_time = timer::GetRealTime();
   char unit[4] = {'K','M','G','T'};
   cudaSafeCall(cudaMemset(d_solution, C64(0), sizeof(U64)));
+
+  // Initialize the pool
+  InitPool<<<BLOCK_DIM_1D, THREAD_DIM_1D>>>(d_magics, d_rand64, target_bits);
   while (!stopped)
   {
+    // Regenerate randoms
+    curandGenerate(rnd_gen, (U32*)d_rand64, POOL_SIZE*3*2);
+
     double time = timer::GetRealTime() - start_time;
     if (time > 5)
     {
@@ -181,12 +185,12 @@ bool process(int target_bits, int max_bits, const U64 *block, const U64 *attack)
       break;
     }
 
+
     // Select best <N> parents
-    SelectParents<<<1, NUM_PARENTS>>>(d_magics, d_fitness, d_sum, d_parents, d_rands32);
+    cudaSafeCall(cudaDeviceSynchronize());
+    SelectParents<<<1, NUM_PARENTS>>>(d_magics, d_fitness, d_sum, d_parents, d_rand32);
 
     // Create offspring
-    curandGenerate(rnd_gen, (U32*)d_rand64, POOL_SIZE*3*2);
-    cudaSafeCall(cudaDeviceSynchronize());
     CreateOffspring<<<BLOCK_DIM_1D, THREAD_DIM_1D>>>(d_magics, d_parents, d_rand64);
 
     generation++;
