@@ -4,11 +4,11 @@
 #include <cuda_runtime_api.h>
 #include <curand.h>
 
-#define NUM_PARENTS 10
+#define NUM_PARENTS 20
 #define BLOCK_DIM_1D 32
-#define THREAD_DIM_1D 32
-#define SEED 0x3ad830cull
-#define POOL_SIZE 1024
+#define THREAD_DIM_1D 64
+#define SEED 0x3ad308cull
+#define POOL_SIZE 2048
 #define C64(x) x##ull
 
 typedef unsigned long long U64;
