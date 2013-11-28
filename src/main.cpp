@@ -346,11 +346,16 @@ int main(int argc, char **argv)
   U64 solution;
   if (gpu::Process(target_bits, max_bits, &block_list[0], &attack_list[0], solution))
   {
-    assert(target_bits == 64-(solution >> 58));
-    assert(collisions(solution) == 0);
-    fprintf(stderr, "0x%llxull\t%s\t %c%d\t%d\n",
-            solution, is_bishop ? "bishop" : "rook",
-            char(square%8+65), square/8+1, square);
+    if (collisions(solution) == 0)
+    {
+      fprintf(stderr, "0x%llxull\t%s\t %c%d\t%d\n",
+              solution, is_bishop ? "bishop" : "rook",
+              char(square%8+65), square/8+1, square);
+    }
+    else
+    {
+      fprintf(stderr, "Error in solution\n");
+    }
   }
   else
   {
