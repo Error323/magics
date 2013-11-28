@@ -116,8 +116,11 @@ __global__ void CreateOffspring(U64 *magics, U64 *parents, U64 *rand64, int targ
   {
     U64 father = sparents[a];
     U64 mother = sparents[b];
+    /*
     int crossover = (r3 % 62) + 1; 
     U64 father_side = (C64(1) << crossover) - 1;
+    */
+    U64 father_side = r1 ^ r2;
     child = (father & father_side) | (mother & ~father_side);
     child ^= (r1 & r2 & r3 & C64(0x3ffffffffffffff));
   }
@@ -167,6 +170,7 @@ bool Process(int target_bits, int max_bits, const U64 *block, const U64 *attack,
   // Initialize the pool
   InitPool<<<NUM_ISLANDS, NUM_INDIVIDUALS>>>(d_magics, d_rand64, target_bits);
   U32 collisions = 10000;
+  U64 best = C64(0);
   while (!stopped && !found)
   {
     // Regenerate randoms
@@ -180,7 +184,7 @@ bool Process(int target_bits, int max_bits, const U64 *block, const U64 *attack,
       int u = floor(log10(mps)) / 3;
       u = std::max(std::min(u, 4), 1);
       mps /= pow(10, u*3);
-      printf("G %d\tS %0.2f%c m/s C %u\n", generation, mps, unit[u-1], collisions);
+      printf("G %d\tS %0.2f%c m/s C %u M 0x%llxull\n", generation, mps, unit[u-1], collisions, best);
       start_time += time;
       counter = 0;
     }
@@ -202,7 +206,11 @@ bool Process(int target_bits, int max_bits, const U64 *block, const U64 *attack,
         solution = h_parents[i];
         break;
       }
-      collisions = std::min(h_collisions[i], collisions);
+      if (h_collisions[i] <= collisions)
+      {
+        collisions = h_collisions[i];
+        best = h_parents[i];
+      }
     }
 
     // Create offspring
