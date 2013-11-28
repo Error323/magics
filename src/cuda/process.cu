@@ -124,7 +124,7 @@ bool Process(int target_bits, int max_bits, const U64 *block, const U64 *attack,
   // Create random number generator
   curandGenerator_t rnd_gen;
   curandCreateGenerator(&rnd_gen, CURAND_RNG_PSEUDO_MTGP32);
-  curandSetPseudoRandomGeneratorSeed(rnd_gen, 0x3fad24ull);
+  curandSetPseudoRandomGeneratorSeed(rnd_gen, time(0));
 
   // Allocate all required memory
   U64 *d_rand64;
