@@ -49,6 +49,7 @@ __global__ void SelectParents(U64 *magics, U64 *parents, U32 *collisions, U64 *u
   int start = id*m;
   int index;
 
+  #pragma unroll 32
   for (int i = 0; i < n; i++)
   {
     index = Transform(block_list[i], magic);

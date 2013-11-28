@@ -6,7 +6,7 @@ cmake_minimum_required (VERSION 2.8)
 #-------------------------------------------------------------------------------
 set (CMAKE_CXX_FLAGS "-Wall -Wextra")
 set (CMAKE_CXX_FLAGS_DEBUG "-O0 -g")
-set (CMAKE_CXX_FLAGS_RELEASE "-O3 -march=native -DNDEBUG -DQT_NO_DEBUG")
+set (CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG")
 set (CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O2 -g")
 
 option (ENABLE_CUDA "Enable/disable cuda" ON)
@@ -44,7 +44,7 @@ set (SOURCES_GPU
 if (CUDA_FOUND)
   include_directories("/usr/local/cuda/include")
   link_directories("/usr/local/cuda/lib64")
-  set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS} -gencode arch=compute_30,code=sm_30 -O3 -Xptxas=-v)
+  set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS} ${CMAKE_CXX_FLAGS_RELEASE} -gencode arch=compute_30,code=sm_30 -Xptxas=-v)
   cuda_add_executable (${CMAKE_PROJECT_NAME}-gpu ${SOURCES_GPU})
   target_link_libraries (${CMAKE_PROJECT_NAME}-gpu
     rt
@@ -62,10 +62,11 @@ target_link_libraries (${CMAKE_PROJECT_NAME}-cpu
 #-------------------------------------------------------------------------------
 message (STATUS "")
 message (STATUS " C/C++:")
-message (STATUS "   C++ Compiler:               ${CMAKE_CXX_COMPILER}")
-message (STATUS "   C++ flags (Release):        ${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_RELEASE}")
-message (STATUS "   C++ flags (Debug):          ${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_DEBUG}")
-message (STATUS "   C++ flags (RelWithDebInfo): ${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_RELWITHDEBINFO}")
+message (STATUS "   C++ Compiler:                ${CMAKE_CXX_COMPILER}")
+message (STATUS "   C++  flags (Release):        ${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_RELEASE}")
+message (STATUS "   C++  flags (Debug):          ${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_DEBUG}")
+message (STATUS "   C++  flags (RelWithDebInfo): ${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_RELWITHDEBINFO}")
+message (STATUS "   NVCC flags:                  ${CUDA_NVCC_FLAGS}")
 message (STATUS "")
 message (STATUS " CMakeflags (${CMAKE_PROJECT_NAME}):")
 message (STATUS "   CMAKE_BUILD_TYPE            ${CMAKE_BUILD_TYPE}")
