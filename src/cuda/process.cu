@@ -19,7 +19,6 @@ namespace gpu
 {
 __constant__ U64 block_list[1 << 12];
 __constant__ U64 attack_list[1 << 12];
-extern __shared__ U32 data[];
 
 __device__ int Transform(U64 board, const U64 magic)
 {
@@ -89,10 +88,10 @@ __global__ void SelectParents(U64 *magics, U64 *parents, U32 *collisions, U64 *u
 
 __global__ void CreateOffspring(U64 *magics, U64 *parents, U64 *rand64)
 {
-  U64 *s_parents = (U64*) &data[0];
+  __shared__ U64 sparents[NUM_ISLANDS];
 
-  if (threadIdx.x < gridDim.x)
-    s_parents[threadIdx.x] = parents[threadIdx.x];
+  if (threadIdx.x < NUM_ISLANDS)
+    sparents[threadIdx.x] = parents[threadIdx.x];
 
   __syncthreads();
 
@@ -101,8 +100,8 @@ __global__ void CreateOffspring(U64 *magics, U64 *parents, U64 *rand64)
   U64 r1     = rand64[id];
   U64 r2     = rand64[id+blockIdx.x*blockDim.x];
   U64 r3     = rand64[id+2*blockIdx.x*blockDim.x];
-  U64 father = s_parents[r1 % gridDim.x];
-  U64 mother = s_parents[r2 % gridDim.x];
+  U64 father = sparents[r1 % NUM_ISLANDS];
+  U64 mother = sparents[r2 % NUM_ISLANDS];
   int crossover = r3 % 64; 
   U64 father_side = (C64(1) << crossover) - 1;
   child = (father & father_side) | (mother & ~father_side);
@@ -152,7 +151,6 @@ bool Process(int target_bits, int max_bits, const U64 *block, const U64 *attack,
 
   // Initialize the pool
   InitPool<<<NUM_ISLANDS, NUM_INDIVIDUALS>>>(d_magics, d_rand64, target_bits);
-  const size_t size = NUM_ISLANDS * sizeof(U64);
   U32 collisions = 10000;
   while (!stopped && !found)
   {
@@ -189,14 +187,13 @@ bool Process(int target_bits, int max_bits, const U64 *block, const U64 *attack,
         solution = h_parents[i];
         break;
       }
-      if (h_collisions[i] < collisions)
-        collisions = h_collisions[i];
+      collisions = std::min(h_collisions[i], collisions);
     }
 
     // Create offspring
     if (!found)
     {
-      CreateOffspring<<<NUM_ISLANDS, NUM_INDIVIDUALS, size>>>(d_magics, d_parents, d_rand64);
+      CreateOffspring<<<NUM_ISLANDS, NUM_INDIVIDUALS>>>(d_magics, d_parents, d_rand64);
       generation++;
       counter += NUM_ISLANDS*NUM_INDIVIDUALS;
     }
