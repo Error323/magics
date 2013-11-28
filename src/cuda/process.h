@@ -17,7 +17,7 @@ namespace gpu
 __device__ int Transform(U64 board, const U64 magic);
 __global__ void InitPool(U64 *magics, U64 *randoms, int target_bits);
 __global__ void SelectParents(U64 *magics, U64 *parents, U32 *collisions, U64 *used, int n, int m);
-__global__ void CreateOffspring(U64 *magics, U64 *parents, U64 *rand64);
+__global__ void CreateOffspring(U64 *magics, U64 *parents, U64 *rand64, int target_bits);
 bool Process(int target_bits, int max_bits, const U64 *block, const U64 *attack, U64 &solution);
 }
 

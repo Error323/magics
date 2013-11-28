@@ -43,7 +43,6 @@ __global__ void SelectParents(U64 *magics, U64 *parents, U32 *collisions, U64 *u
   int id = blockIdx.x * blockDim.x + threadIdx.x;
   __shared__ U64 smagics[NUM_INDIVIDUALS];
   __shared__ U32 scollisions[NUM_INDIVIDUALS];
-
   U64 magic = magics[id];
   U32 col = 0;
   int start = id*m;
@@ -87,7 +86,7 @@ __global__ void SelectParents(U64 *magics, U64 *parents, U32 *collisions, U64 *u
   }
 }
 
-__global__ void CreateOffspring(U64 *magics, U64 *parents, U64 *rand64)
+__global__ void CreateOffspring(U64 *magics, U64 *parents, U64 *rand64, int target_bits)
 {
   __shared__ U64 sparents[NUM_ISLANDS];
 
@@ -101,12 +100,27 @@ __global__ void CreateOffspring(U64 *magics, U64 *parents, U64 *rand64)
   U64 r1     = rand64[id];
   U64 r2     = rand64[id+blockIdx.x*blockDim.x];
   U64 r3     = rand64[id+2*blockIdx.x*blockDim.x];
-  U64 father = sparents[r1 % NUM_ISLANDS];
-  U64 mother = sparents[r2 % NUM_ISLANDS];
-  int crossover = r3 % 64; 
-  U64 father_side = (C64(1) << crossover) - 1;
-  child = (father & father_side) | (mother & ~father_side);
-  child ^= (r1 & r2 & r3 & C64(0x3ffffffffffffff));
+  int a = r1 % NUM_ISLANDS;
+  int b = r2 % NUM_ISLANDS;
+  int c = r3 % NUM_ISLANDS;
+
+  // add random child
+  if (a == c || b == c)
+  {
+    child = r1 & r2 & r3 & C64(0x3ffffffffffffff);
+    U64 shift = 64 - target_bits;
+    child |= shift << 58;
+  }
+  // have some good old binary sex
+  else
+  {
+    U64 father = sparents[a];
+    U64 mother = sparents[b];
+    int crossover = (r3 % 62) + 1; 
+    U64 father_side = (C64(1) << crossover) - 1;
+    child = (father & father_side) | (mother & ~father_side);
+    child ^= (r1 & r2 & r3 & C64(0x3ffffffffffffff));
+  }
   magics[id] = child;
 }
 
@@ -194,7 +208,7 @@ bool Process(int target_bits, int max_bits, const U64 *block, const U64 *attack,
     // Create offspring
     if (!found)
     {
-      CreateOffspring<<<NUM_ISLANDS, NUM_INDIVIDUALS>>>(d_magics, d_parents, d_rand64);
+      CreateOffspring<<<NUM_ISLANDS, NUM_INDIVIDUALS>>>(d_magics, d_parents, d_rand64, target_bits);
       generation++;
       counter += NUM_ISLANDS*NUM_INDIVIDUALS;
     }
