@@ -69,6 +69,36 @@ void print(const U64 &inBoard)
   printf("  a b c d e f g h\n");
 }
 
+int transform(U64 board, const U64 magic)
+{
+  board *= magic;
+  board >>= (magic >> 58);
+
+  return static_cast<int>(board);
+}
+
+int collisions(U64 magic)
+{
+  int m = 1 << target_bits;
+  U64 used_list[m];
+  memset(used_list, 0, sizeof(U64)*m);
+  int index, n, c = 0;
+
+  n = (1 << max_bits);
+  for (int i = 0; i < n; i++)
+  {
+    index = transform(block_list[i], magic);
+
+    if (used_list[index] == C64(0))
+      used_list[index] = attack_list[i];
+    else
+    if (used_list[index] != attack_list[i])
+      c++;
+  }
+
+  return c;
+}
+
 int count_1s(register const U64 b)
 {
   return __popcntq(b);
@@ -313,7 +343,21 @@ int main(int argc, char **argv)
           is_bishop ? "bishop" : "rook", char(square%8+65), square/8+1,
           min_bits, target_bits, max_bits);
 
-  gpu::process(target_bits, max_bits, &block_list[0], &attack_list[0]);
+  U64 solution;
+  if (gpu::Process(target_bits, max_bits, &block_list[0], &attack_list[0], solution))
+  {
+    assert(target_bits == 64-(solution >> 58));
+    assert(collisions(solution) == 0);
+    fprintf(stderr, "0x%llxull\t%s\t %c%d\t%d\n",
+            solution, is_bishop ? "bishop" : "rook",
+            char(square%8+65), square/8+1, square);
+  }
+  else
+  {
+    fprintf(stderr, "FAIL\t%s\t %c%d\t%d\n",
+            is_bishop ? "bishop" : "rook",
+            char(square%8+65), square/8+1, square);
+  }
 
   return EXIT_SUCCESS;
 }

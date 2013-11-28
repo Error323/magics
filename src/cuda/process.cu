@@ -17,8 +17,9 @@
 extern bool stopped;
 namespace gpu
 {
-__constant__ U64 block_list[4096];
-__constant__ U64 attack_list[4096];
+__constant__ U64 block_list[1 << 12];
+__constant__ U64 attack_list[1 << 12];
+extern __shared__ U32 data[];
 
 __device__ int Transform(U64 board, const U64 magic)
 {
@@ -29,93 +30,92 @@ __device__ int Transform(U64 board, const U64 magic)
 
 __global__ void InitPool(U64 *magics, U64 *randoms, int target_bits)
 {
-  int id = blockIdx.x * THREAD_DIM_1D + threadIdx.x;
+  int stride = blockIdx.x * blockDim.x;
+  int id = stride + threadIdx.x;
 
-  if (id >= POOL_SIZE)
-    return;
-
-  U64 magic = randoms[id] & randoms[id+POOL_SIZE] & randoms[id+POOL_SIZE*2] & C64(0x3ffffffffffffff);
+  U64 magic = randoms[id] & randoms[id+stride] & randoms[id+stride*2] & C64(0x3ffffffffffffff);
   U64 shift = 64 - target_bits;
   magic |= shift << 58;
   magics[id] = magic;
 }
 
-__global__ void ComputeFitness(U64 *magics, int *fitness, U64 *used_list, U64 *solution, int *sum, int n, int m)
+__global__ void SelectParents(U64 *magics, U64 *parents, U32 *collisions, U64 *used, int n, int m)
 {
-  int id = blockIdx.x * THREAD_DIM_1D + threadIdx.x;
-
-  if (id >= POOL_SIZE)
-    return;
+  int id = blockIdx.x * blockDim.x + threadIdx.x;
+  __shared__ U64 smagics[NUM_INDIVIDUALS];
+  __shared__ U32 scollisions[NUM_INDIVIDUALS];
 
   U64 magic = magics[id];
-  U64 used;
-  int collisions = 0;
+  U32 col = 0;
   int start = id*m;
   int index;
-  int f;
 
   for (int i = 0; i < n; i++)
   {
     index = Transform(block_list[i], magic);
-    used = used_list[start + index];
 
-    if (used == C64(0))
-      used_list[start + index] = attack_list[i];
+    if (used[start + index] == C64(0))
+      used[start + index] = attack_list[i];
     else
-    if (used != attack_list[i])
-      collisions++;
+    if (used[start + index] != attack_list[i])
+      col++;
   }
 
-  // we found a perfect solution
-  if (collisions == 0)
-    atomicExch(solution, magic);
+  scollisions[threadIdx.x] = col;
+  smagics[threadIdx.x] = magic;
+  __syncthreads();
 
-  // compute the sum of all the fitness
-  f = n - collisions;
-  atomicAdd(sum, f);
-  fitness[id] = f;
-}
-
-__global__ void SelectParents(U64 *magics, int *fitness, int *sum, U64 *parents, U32 *randoms)
-{
-  int pid = threadIdx.x;
-  int r   = randoms[pid] % (*sum);
-  int s   = fitness[0];
-  for (int i = 1; i < POOL_SIZE; i++)
+  for (int offset = blockDim.x / 2; offset > 0; offset >>= 1)
   {
-    if (r < s)
+    if (threadIdx.x < offset)
     {
-      parents[pid] = magics[i-1];
-      break;
+      if (scollisions[threadIdx.x] > scollisions[threadIdx.x + offset])
+      {
+        scollisions[threadIdx.x] = scollisions[threadIdx.x + offset];
+        smagics[threadIdx.x] = smagics[threadIdx.x + offset];
+      }
     }
-    s += fitness[i];
+
+    __syncthreads();
+  }
+
+  // thread 0 writes the final result
+  if (threadIdx.x == 0)
+  {
+    collisions[blockIdx.x] = scollisions[0];
+    parents[blockIdx.x] = smagics[0];
   }
 }
 
 __global__ void CreateOffspring(U64 *magics, U64 *parents, U64 *rand64)
 {
-  int id = blockIdx.x * THREAD_DIM_1D + threadIdx.x;
+  U64 *s_parents = (U64*) &data[0];
 
-  if (id >= POOL_SIZE)
-    return;
+  if (threadIdx.x < gridDim.x)
+    s_parents[threadIdx.x] = parents[threadIdx.x];
 
+  __syncthreads();
+
+  int id = blockIdx.x * blockDim.x + threadIdx.x;
   U64 child;
-  U64 r1 = rand64[id];
-  U64 r2 = rand64[id+POOL_SIZE];
-  U64 r3 = rand64[id+2*POOL_SIZE];
-  U64 father = parents[r1 % NUM_PARENTS];
-  U64 mother = parents[r2 % NUM_PARENTS];
-  int crossover = r3 % 64;
+  U64 r1     = rand64[id];
+  U64 r2     = rand64[id+blockIdx.x*blockDim.x];
+  U64 r3     = rand64[id+2*blockIdx.x*blockDim.x];
+  U64 father = s_parents[r1 % gridDim.x];
+  U64 mother = s_parents[r2 % gridDim.x];
+  int crossover = r3 % 64; 
   U64 father_side = (C64(1) << crossover) - 1;
   child = (father & father_side) | (mother & ~father_side);
   child ^= (r1 & r2 & r3 & C64(0x3ffffffffffffff));
   magics[id] = child;
 }
 
-bool process(int target_bits, int max_bits, const U64 *block, const U64 *attack)
+bool Process(int target_bits, int max_bits, const U64 *block, const U64 *attack, U64 &solution)
 {
   int n = 1 << max_bits;
   int m = 1 << target_bits;
+  bool found = false;
+  cudaSafeCall(cudaDeviceReset());
 
   // Store block and attack list in constant memory on device
   cudaSafeCall(cudaMemcpyToSymbol(block_list, block, sizeof(U64)*n));
@@ -124,41 +124,40 @@ bool process(int target_bits, int max_bits, const U64 *block, const U64 *attack)
   // Create random number generator
   curandGenerator_t rnd_gen;
   curandCreateGenerator(&rnd_gen, CURAND_RNG_PSEUDO_MTGP32);
-  curandSetPseudoRandomGeneratorSeed(rnd_gen, time(0));
-
-  // Generate random numbers for the pool
-  U64 *d_rand64;
-  cudaSafeCall(cudaMalloc((void**)&d_rand64, POOL_SIZE*3*sizeof(U64)));
-  curandGenerate(rnd_gen, (U32*)d_rand64, POOL_SIZE*3*2);
-  cudaSafeCall(cudaDeviceSynchronize());
+  curandSetPseudoRandomGeneratorSeed(rnd_gen, 0x3fad24ull);
 
   // Allocate all required memory
+  U64 *d_rand64;
   U64 *d_magics;
-  U64 *d_used, *d_solution;
-  int *d_fitness, *d_sum;
+  U64 *d_used;
   U64 *d_parents;
-  U32 *d_rand32 = (U32*) d_rand64;
-  cudaSafeCall(cudaMalloc((void**)&d_magics, POOL_SIZE*sizeof(U64)));
-  cudaSafeCall(cudaMalloc((void**)&d_fitness, POOL_SIZE*sizeof(int)));
-  cudaSafeCall(cudaMalloc((void**)&d_sum, sizeof(int)));
-  cudaSafeCall(cudaMalloc((void**)&d_used, POOL_SIZE*m*sizeof(U64)));
-  cudaSafeCall(cudaMalloc((void**)&d_solution, sizeof(U64)));
-  cudaSafeCall(cudaMalloc((void**)&d_parents, NUM_PARENTS*sizeof(U64)));
+  U32 *d_collisions;
+  U64 h_parents[NUM_ISLANDS];
+  U32 h_collisions[NUM_ISLANDS];
+  cudaSafeCall(cudaMalloc((void**)&d_rand64, NUM_ISLANDS*NUM_INDIVIDUALS*3*sizeof(U64)));
+  cudaSafeCall(cudaMalloc((void**)&d_magics, NUM_ISLANDS*NUM_INDIVIDUALS*sizeof(U64)));
+  cudaSafeCall(cudaMalloc((void**)&d_collisions, NUM_ISLANDS*sizeof(U32)));
+  cudaSafeCall(cudaMalloc((void**)&d_parents, NUM_ISLANDS*sizeof(U64)));
+  cudaSafeCall(cudaMalloc((void**)&d_used, NUM_ISLANDS*NUM_INDIVIDUALS*m*sizeof(U64)));
 
-  U64 solution = C64(0);
+  // Generate random numbers for the pool
+  curandGenerate(rnd_gen, (U32*)d_rand64, NUM_ISLANDS*NUM_INDIVIDUALS*3*2);
+  cudaSafeCall(cudaDeviceSynchronize());
+
   U32 generation = 0;
   U32 counter = 0;
 
   double start_time = timer::GetRealTime();
   char unit[4] = {'K','M','G','T'};
-  cudaSafeCall(cudaMemset(d_solution, C64(0), sizeof(U64)));
 
   // Initialize the pool
-  InitPool<<<BLOCK_DIM_1D, THREAD_DIM_1D>>>(d_magics, d_rand64, target_bits);
-  while (!stopped)
+  InitPool<<<NUM_ISLANDS, NUM_INDIVIDUALS>>>(d_magics, d_rand64, target_bits);
+  const size_t size = NUM_ISLANDS * sizeof(U64);
+  while (!stopped && !found)
   {
     // Regenerate randoms
-    curandGenerate(rnd_gen, (U32*)d_rand64, POOL_SIZE*3*2);
+    curandGenerate(rnd_gen, (U32*)d_rand64, NUM_ISLANDS*NUM_INDIVIDUALS*3*2);
+    cudaSafeCall(cudaDeviceSynchronize());
 
     double time = timer::GetRealTime() - start_time;
     if (time > 5)
@@ -173,42 +172,41 @@ bool process(int target_bits, int max_bits, const U64 *block, const U64 *attack)
     }
 
     // Compute fitness
-    cudaSafeCall(cudaMemset(d_used, C64(0), POOL_SIZE*m*sizeof(U64)));
-    cudaSafeCall(cudaMemset(d_sum, 0, sizeof(int)));
-    ComputeFitness<<<BLOCK_DIM_1D, THREAD_DIM_1D>>>(d_magics, d_fitness, d_used, d_solution, d_sum, n, m);
+    cudaSafeCall(cudaMemset(d_used, C64(0), NUM_ISLANDS*NUM_INDIVIDUALS*m*sizeof(U64)));
+    cudaSafeCall(cudaMemset(d_collisions, 10000, NUM_ISLANDS*sizeof(U32)));
+    SelectParents<<<NUM_ISLANDS, NUM_INDIVIDUALS>>>(d_magics, d_parents, d_collisions, d_used, n, m);
     
     // Check for solution
-    cudaSafeCall(cudaMemcpy(&solution, d_solution, sizeof(U64), cudaMemcpyDeviceToHost));
-    if (solution != C64(0))
+    cudaSafeCall(cudaMemcpy(h_parents, d_parents, NUM_ISLANDS*sizeof(U64), cudaMemcpyDeviceToHost));
+    cudaSafeCall(cudaMemcpy(h_collisions, d_collisions, NUM_ISLANDS*sizeof(U32), cudaMemcpyDeviceToHost));
+
+    for (int i = 0; i < NUM_ISLANDS; i++)
     {
-      fprintf(stderr, "Solution found: 0x%llxull\n", solution);
-      break;
+      found = h_collisions[i] == 0;
+      if (found)
+      {
+        solution = h_parents[i];
+        break;
+      }
     }
 
-
-    // Select best <N> parents
-    cudaSafeCall(cudaDeviceSynchronize());
-    SelectParents<<<1, NUM_PARENTS>>>(d_magics, d_fitness, d_sum, d_parents, d_rand32);
-
     // Create offspring
-    CreateOffspring<<<BLOCK_DIM_1D, THREAD_DIM_1D>>>(d_magics, d_parents, d_rand64);
-
-    generation++;
-    counter += POOL_SIZE;
+    if (!found)
+    {
+      CreateOffspring<<<NUM_ISLANDS, NUM_INDIVIDUALS, size>>>(d_magics, d_parents, d_rand64);
+      generation++;
+      counter += NUM_ISLANDS*NUM_INDIVIDUALS;
+    }
   }
-
   
   // Free allocated cuda memory
   curandDestroyGenerator(rnd_gen);
   cudaSafeCall(cudaFree(d_rand64));
   cudaSafeCall(cudaFree(d_magics));
   cudaSafeCall(cudaFree(d_used));
-  cudaSafeCall(cudaFree(d_fitness));
-  cudaSafeCall(cudaFree(d_sum));
-  cudaSafeCall(cudaFree(d_solution));
+  cudaSafeCall(cudaFree(d_collisions));
   cudaSafeCall(cudaFree(d_parents));
-  cudaSafeCall(cudaDeviceReset());
 
-  return true;
+  return found;
 }
 } // namespace gpu
