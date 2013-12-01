@@ -38,26 +38,28 @@ __global__ void InitPool(U64 *magics, U64 *randoms, int target_bits)
   magics[id] = magic;
 }
 
-__global__ void SelectParents(U64 *magics, U64 *parents, U32 *collisions, U64 *used, int n, int m)
+__global__ void SelectParents(U64 *magics, U64 *parents, U32 *collisions, U64 *used_list, int n, int m)
 {
   int id = blockIdx.x * blockDim.x + threadIdx.x;
   __shared__ U64 smagics[NUM_INDIVIDUALS];
   __shared__ U32 scollisions[NUM_INDIVIDUALS];
   U64 magic = magics[id];
+  U64 used;
   U32 col = 0;
   int start = id*m;
   int index;
 
-  #pragma unroll 32
   for (int i = 0; i < n; i++)
   {
     index = Transform(block_list[i], magic);
 
-    if (used[start + index] == C64(0))
-      used[start + index] = attack_list[i];
-    else
-    if (used[start + index] != attack_list[i])
-      col++;
+    used = used_list[start + index];
+    if (used == C64(0))
+    {
+      used_list[start + index] = attack_list[i];
+      continue;
+    }
+    col += used != attack_list[i];
   }
 
   scollisions[threadIdx.x] = col;
@@ -116,10 +118,6 @@ __global__ void CreateOffspring(U64 *magics, U64 *parents, U64 *rand64, int targ
   {
     U64 father = sparents[a];
     U64 mother = sparents[b];
-    /*
-    int crossover = (r3 % 62) + 1; 
-    U64 father_side = (C64(1) << crossover) - 1;
-    */
     U64 father_side = r1 ^ r2;
     child = (father & father_side) | (mother & ~father_side);
     child ^= (r1 & r2 & r3 & C64(0x3ffffffffffffff));
