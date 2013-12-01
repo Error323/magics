@@ -169,7 +169,7 @@ bool Process(int target_bits, int max_bits, const U64 *block, const U64 *attack,
   InitPool<<<NUM_ISLANDS, NUM_INDIVIDUALS>>>(d_magics, d_rand64, target_bits);
   U32 collisions = 10000;
   U64 best = C64(0);
-  while (!stopped && !found)
+  while (!stopped)
   {
     // Regenerate randoms
     curandGenerate(rnd_gen, (U32*)d_rand64, NUM_ISLANDS*NUM_INDIVIDUALS*3*2);
@@ -211,13 +211,13 @@ bool Process(int target_bits, int max_bits, const U64 *block, const U64 *attack,
       }
     }
 
+    if (found)
+      break;
+
     // Create offspring
-    if (!found)
-    {
-      CreateOffspring<<<NUM_ISLANDS, NUM_INDIVIDUALS>>>(d_magics, d_parents, d_rand64, target_bits);
-      generation++;
-      counter += NUM_ISLANDS*NUM_INDIVIDUALS;
-    }
+    CreateOffspring<<<NUM_ISLANDS, NUM_INDIVIDUALS>>>(d_magics, d_parents, d_rand64, target_bits);
+    generation++;
+    counter += NUM_ISLANDS*NUM_INDIVIDUALS;
   }
   
   // Free allocated cuda memory
