@@ -182,7 +182,7 @@ bool Process(int target_bits, int max_bits, const U64 *block, const U64 *attack,
       int u = floor(log10(mps)) / 3;
       u = std::max(std::min(u, 4), 1);
       mps /= pow(10, u*3);
-      printf("G %d\tS %0.2f%c m/s C %u M 0x%llxull\n", generation, mps, unit[u-1], collisions, best);
+      printf("G %8d S %0.2f%c m/s C %u M 0x%llxull\n", generation, mps, unit[u-1], collisions, best);
       start_time += time;
       counter = 0;
     }
