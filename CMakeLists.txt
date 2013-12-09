@@ -4,7 +4,7 @@ cmake_minimum_required (VERSION 2.8)
 #-------------------------------------------------------------------------------
 # General Settings
 #-------------------------------------------------------------------------------
-set (CMAKE_CXX_FLAGS "-Wall -Wextra -std=c++11")
+set (CMAKE_CXX_FLAGS "-Wall -Wextra -std=c++11 -march=native")
 set (CMAKE_CXX_FLAGS_DEBUG "-O0 -g")
 set (CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG")
 set (CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O2 -g")

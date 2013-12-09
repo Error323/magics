@@ -1,6 +1,7 @@
 #include "island.h"
 #include <iostream>
 #include <cassert>
+#include <immintrin.h>
 
 vector<U64> Island::sAttack;
 vector<U64> Island::sBlock;
@@ -85,7 +86,17 @@ chromosome Island::NextGen(const vector<chromosome> &parents, U64 best, int best
 int Island::Collisions(const U64 magic)
 {
   int c = 0;
+  #if defined __AVX__
+  __m256i *dst = reinterpret_cast<__m256i*>(mUsed.data());
+  for (int i = 0, n = mUsed.size()/4; i < n; i++)
+    dst[i] = _mm256_set1_epi64x(0);
+  #elif defined __SSE4_2__
+  __m128i *dst = reinterpret_cast<__m128i*>(mUsed.data());
+  for (int i = 0, n = mUsed.size()/2; i < n; i++)
+    dst[i] = _mm_set1_epi64x(0);
+  #else
   mUsed.assign(mUsed.size(), C64(0));
+  #endif
   int index;
 
   for (int i = 0, n = sAttack.size(); i < n; i++)
