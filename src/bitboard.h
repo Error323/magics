@@ -6,6 +6,10 @@
 #include <stdlib.h>
 #include <x86intrin.h>
 
+#include <vector>
+
+using namespace std;
+
 typedef unsigned long long U64;
 typedef unsigned long U32;
 typedef unsigned short U16;
@@ -17,18 +21,29 @@ typedef signed char I8;
 
 #define C64(x) x##ull
 
-inline U64 R64()
+const int r_dist_attack_sets[64] =
 {
-  U64 r = random();
-  r <<= 32;
-  r |= random();
-  return r;
-}
+  49, 42, 70,  84,  84,  70,  42, 49,
+  42, 36, 60,  72,  72,  60,  36, 42,
+  70, 60, 100, 120, 120, 100, 60, 70,
+  84, 72, 120, 144, 144, 120, 72, 84,
+  84, 72, 120, 144, 144, 120, 72, 84,
+  70, 60, 100, 120, 120, 100, 60, 70,
+  42, 36, 60,  72,  72,  60,  36, 42,
+  49, 42, 70,  84,  84,  70,  42, 49
+};
 
-inline U64 R64Few()
+const int b_dist_attack_sets[64] =
 {
-  return R64() & R64() & R64();
-}
+  7,  6,  10, 12,  12,  10, 6,  7,
+  6,  6,  10, 12,  12,  10, 6,  6,
+  10, 10, 40, 48,  48,  40, 10, 10,
+  12, 12, 48, 108, 108, 48, 12, 12,
+  12, 12, 48, 108, 108, 48, 12, 12,
+  10, 10, 40, 48,  48,  40, 10, 10,
+  6,  6,  10, 12,  12,  10, 6,  6,
+  7,  6,  10, 12,  12,  10, 6,  7
+};
 
 /// Pops the least significant bit of the board and returns index
 inline int PopLSB(register U64 &b)
@@ -49,6 +64,12 @@ inline int CountBits(register U64 b)
 {
   return __popcntq(b);
 }
+
+U64 Index2U64(int index, int bits, U64 m);
+U64 bmask(int sq);
+U64 rmask(int sq);
+U64 ratt(int sq, U64 block);
+U64 batt(int sq, U64 block);
 
 /// Print a bitboard to stdout
 void Print1(const U64 board);

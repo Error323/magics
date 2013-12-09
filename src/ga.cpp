@@ -14,9 +14,9 @@
 
 extern uint64_t Rand64(void);
 
-#define NUM_PARENTS 8
+#define NUM_PARENTS 3
 #define NUM_RANDOM 1
-#define POPULATION_SIZE 1000
+#define POPULATION_SIZE 10
 #define CHROMO_LENGTH 64
 
 typedef unsigned long long U64;
@@ -298,7 +298,6 @@ int transform(U64 board, const U64 magic)
 
 void ComputeFitness(Chromosome &chromosome)
 {
-  counter++;
   used_list.assign(used_list.size(), C64(0));
   chromosome.collisions = 0;
   int index, n;
@@ -559,10 +558,11 @@ int main(int argc, char **argv)
   {
     solution_found = solution.collisions == 0;
 
+    counter++;
     double time = timer::GetRealTime() - start_time;
     if (time > 5)
     {
-      double mps = counter / time;
+      double mps = (POPULATION_SIZE*counter) / time;
       int u = floor(log10(mps)) / 3;
       u = std::max(std::min(u, 4), 1);
       mps /= pow(10, u*3);
