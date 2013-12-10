@@ -1,5 +1,7 @@
 #include <vector>
+#include <random>
 
+#include <immintrin.h>
 #include <time.h>
 #include <math.h>
 #include <stdlib.h>
@@ -9,19 +11,25 @@
 #include <assert.h>
 #include <string.h>
 
+#include "timer.h"
+#include "align.h"
+
 #define NUM_PARENTS 8
 #define NUM_RANDOM 4
 #define POPULATION_SIZE 1000
-#define CHROMO_LENGTH 64
 
 typedef unsigned long long U64;
 typedef unsigned char U8;
 
 #define C64(x) x##ull
-#define RAND_FLT()    (rand()/static_cast<float>(RAND_MAX))
-#define RAND_INT(a,b) ((rand() % ((b)-(a) + 1)) + (a))
+#define RAND_FLT()    (dr(mt))
+#define RAND_PARENT() (dp(mt))
 
 // globals
+std::mt19937_64 mt;
+std::uniform_int_distribution<U64> d64;
+std::uniform_int_distribution<U64> dp(0, NUM_PARENTS-1);
+std::uniform_real_distribution<> dr(0, 1);
 int square;
 int is_bishop;
 U64 mask;
@@ -30,9 +38,17 @@ unsigned int target_bits;
 unsigned int max_bits;
 unsigned int min_bits;
 float fitness_sum;
-std::vector<U64> attack_list;
-std::vector<U64> block_list;
-std::vector<U64> used_list;
+std::vector<U64, AlignmentAllocator<U64, 32>> attack_list;
+std::vector<U64, AlignmentAllocator<U64, 32>> block_list;
+std::vector<U64, AlignmentAllocator<U64, 32>> used_list;
+
+template<int N=1> U64 R64()
+{
+  U64 r = d64(mt);
+  for (int i = 1; i < N; i++)
+    r &= d64(mt);
+  return r;
+}
 
 class Chromosome
 {
@@ -111,23 +127,10 @@ void print(const U64 &inBoard)
   printf("  a b c d e f g h\n");
 }
 
-U64 R64()
-{
-  U64 r = random();
-  r <<= 32;
-  r |= random();
-  return r;
-}
-
-U64 R64Few()
-{
-  return R64() & R64() & R64();
-}
-
 U64 Magic(const U64 bits)
 {
   U64 shift = 64 - bits;
-  U64 magic = R64() & C64(0x3ffffffffffffff);
+  U64 magic = R64<3>() & C64(0x3ffffffffffffff);
   magic |= shift << 58;
 
   return magic;
@@ -295,8 +298,19 @@ int transform(U64 board, const U64 magic)
 
 void ComputeFitness(Chromosome &chromosome)
 {
+  #if defined __AVX__
+  __m256i *dst = reinterpret_cast<__m256i*>(used_list.data());
+  for (int i = 0, n = used_list.size()/4; i < n; i++)
+    dst[i] = _mm256_set1_epi64x(0);
+  #elif defined __SSE4_1__
+  __m128i *dst = reinterpret_cast<__m128i*>(used_list.data());
+  for (int i = 0, n = used_list.size()/2; i < n; i++)
+    dst[i] = _mm_set1_epi64x(0);
+  #else
   used_list.assign(used_list.size(), C64(0));
+  #endif 
   int index, n, i;
+  chromosome.collisions = 0;
 
   n = (1 << max_bits);
   for (i = 0; i < n; i++)
@@ -307,50 +321,10 @@ void ComputeFitness(Chromosome &chromosome)
       used_list[index] = attack_list[i];
     else
     if (used_list[index] != attack_list[i])
-      break;
-  }
-
-  chromosome.fitness = i;
-}
-
-void ComputeCollisions(Chromosome &chromosome)
-{
-  used_list.assign(used_list.size(), C64(0));
-  chromosome.collisions = 0;
-  int index[4], n;
-
-  n = (1 << max_bits);
-  for (int i = 0; i < n; i+=4)
-  {
-    index[0] = transform(block_list[i+0], chromosome.magic);
-    index[1] = transform(block_list[i+1], chromosome.magic);
-    index[2] = transform(block_list[i+2], chromosome.magic);
-    index[3] = transform(block_list[i+3], chromosome.magic);
-
-    if (used_list[index[0]] == C64(0))
-      used_list[index[0]] = attack_list[i+0];
-    else
-    if (used_list[index[0]] != attack_list[i+0])
-      chromosome.collisions++;
-
-    if (used_list[index[1]] == C64(0))
-      used_list[index[1]] = attack_list[i+1];
-    else
-    if (used_list[index[1]] != attack_list[i+1])
-      chromosome.collisions++;
-
-    if (used_list[index[2]] == C64(0))
-      used_list[index[2]] = attack_list[i+2];
-    else
-    if (used_list[index[2]] != attack_list[i+2])
-      chromosome.collisions++;
-
-    if (used_list[index[3]] == C64(0))
-      used_list[index[3]] = attack_list[i+3];
-    else
-    if (used_list[index[3]] != attack_list[i+3])
       chromosome.collisions++;
   }
+
+  chromosome.fitness = n - chromosome.collisions;
 }
 
 void InitializePopulation(std::vector<Chromosome> &pool)
@@ -448,20 +422,19 @@ void GenerateOffspring(std::vector<Chromosome> &pool, const std::vector<Chromoso
   {
     // Select parents
     Chromosome &child = pool[i];
-    int r1 = RAND_INT(0, NUM_PARENTS-1);
-    int r2 = RAND_INT(0, NUM_PARENTS-1);
+    int r1 = RAND_PARENT();
+    int r2 = RAND_PARENT();
     while (r1 == r2)
-      r2 = RAND_INT(0, NUM_PARENTS-1);
+      r2 = RAND_PARENT();
     const Chromosome &father = parents[r1];
     const Chromosome &mother = parents[r2];
 
     // Mate between father and mother
-    int crossover = RAND_INT(1, CHROMO_LENGTH - 1);
-    U64 father_side = (C64(1) << crossover) - 1;
+    U64 father_side = R64();
     child = (father.magic & father_side) | (mother.magic & ~father_side);
 
     // Mutate some bits
-    child.magic ^= R64Few() & C64(0x3ffffffffffffff);
+    child.magic ^= R64<3>() & C64(0x3ffffffffffffff);
     
     // Compute new fitness
     ComputeFitness(child);
@@ -497,7 +470,8 @@ void print_and_exit(int ret)
 
 int main(int argc, char **argv)
 {
-  srand(time(0));
+  std::random_device rd;
+  mt.seed(rd());
   signal(SIGINT, stop);
   signal(SIGTERM, stop);
 
@@ -577,20 +551,32 @@ int main(int argc, char **argv)
     j += strlen(argv[i]);
   }
 
+  constexpr char unit[] = {'K', 'M', 'G', 'T'};
   int generation = 0;
   stopped = false;
   bool solution_found = false;
+  double start_time = GetRealTime();
+  int counter = 0;
   while (!stopped)
   {
     GetBestSolution(pool, solution);
 
-    ComputeCollisions(solution);
+    //ComputeCollisions(solution);
     solution_found = solution.collisions == 0;
 
-    if (generation % 100 == 0)
-      printf("G %d\tC %d\tF %d\t0x%llx\t%s\n",
-             generation, solution.collisions, int(solution.fitness),
-             solution.magic, cmd_line);
+    counter++;
+    double time = GetRealTime() - start_time;
+    if (time >= 5.0 || solution_found)
+    {
+      double mps = (POPULATION_SIZE * counter) / time;
+      int u = floor(log10(mps)) / 3;
+      u = std::max(std::min(u, 4), 1);
+      mps /= pow(10, u*3);
+      printf("G %10d\tS %0.2f%c C %d\n", generation, mps, unit[u-1], solution.collisions);
+      start_time += time;
+      counter = 0;
+      fflush(stdout);
+    }
 
     if (solution_found)
       break;
