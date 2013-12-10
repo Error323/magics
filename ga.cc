@@ -318,10 +318,11 @@ void ComputeFitness(Chromosome &chromosome)
     index = transform(block_list[i], chromosome.magic);
 
     if (used_list[index] == C64(0))
+    {
       used_list[index] = attack_list[i];
-    else
-    if (used_list[index] != attack_list[i])
-      chromosome.collisions++;
+      continue;
+    }
+    chromosome.collisions += used_list[index] != attack_list[i];
   }
 
   chromosome.fitness = n - chromosome.collisions;
@@ -561,7 +562,6 @@ int main(int argc, char **argv)
   {
     GetBestSolution(pool, solution);
 
-    //ComputeCollisions(solution);
     solution_found = solution.collisions == 0;
 
     counter++;
@@ -572,7 +572,7 @@ int main(int argc, char **argv)
       int u = floor(log10(mps)) / 3;
       u = std::max(std::min(u, 4), 1);
       mps /= pow(10, u*3);
-      printf("G %10d\tS %0.2f%c C %d\n", generation, mps, unit[u-1], solution.collisions);
+      printf("G %d S %0.2f%c C %d B 0x%llxull\n", generation, mps, unit[u-1], solution.collisions, solution.magic);
       start_time += time;
       counter = 0;
       fflush(stdout);
@@ -592,12 +592,12 @@ int main(int argc, char **argv)
   if (solution_found)
   {
     assert(target_bits == 64-(solution.magic >> 58));
-    fprintf(stderr, "G %d\t0x%llxull\t%s\t %c%d\t%d\n",
+    fprintf(stdout, "G %d\t0x%llxull\t%s\t %c%d\t%d\n",
             generation, solution.magic, is_bishop ? "bishop" : "rook",
             char(square%8+65), square/8+1, square);
   }
   else
-    fprintf(stderr, "FAIL\t%s\t %c%d\t%d\n",
+    fprintf(stdout, "FAIL\t%s\t %c%d\t%d\n",
             is_bishop ? "bishop" : "rook",
             char(square%8+65), square/8+1, square);
 

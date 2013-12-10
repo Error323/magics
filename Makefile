@@ -1,11 +1,11 @@
 CC=g++
-CFLAGS= -O3 -Wall -Wextra -std=c++11 -march=native
+CFLAGS= -O3 -Wall -Wextra -std=c++0x -march=native
 
 all:
-	$(CC) $(CFLAGS) ga.cc -o magics -lrt
+	$(CC) -o magics $(CFLAGS) ga.cc -lrt
 
 profile:
-	$(CC) $(CFLAGS) -Wl,--no-as-needed ga.cc -o magics -lrt -lprofiler
+	$(CC) -o magics $(CFLAGS) -Wl,--no-as-needed ga.cc -lrt -lprofiler
 
 clean:
 	git clean -f
