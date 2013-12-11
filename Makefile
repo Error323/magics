@@ -1,5 +1,5 @@
-CC=g++
-CFLAGS= -O3 -Wall -Wextra -std=c++0x -march=native
+CC=clang++
+CFLAGS= -O3 -Wall -Wextra -std=c++11 -march=native
 
 all:
 	$(CC) -o magics $(CFLAGS) ga.cc -lrt

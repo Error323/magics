@@ -293,36 +293,35 @@ int transform(U64 board, const U64 magic)
   board *= magic;
   board >>= (magic >> 58);
 
-  return static_cast<int>(board);
+  return board;
 }
 
+#define NUM_ITERS 4
 void ComputeFitness(Chromosome &chromosome)
 {
   #if defined __AVX__
   __m256i *dst = reinterpret_cast<__m256i*>(used_list.data());
   for (int i = 0, n = used_list.size()/4; i < n; i++)
     dst[i] = _mm256_set1_epi64x(0);
-  #elif defined __SSE4_1__
+  #else
   __m128i *dst = reinterpret_cast<__m128i*>(used_list.data());
   for (int i = 0, n = used_list.size()/2; i < n; i++)
     dst[i] = _mm_set1_epi64x(0);
-  #else
-  used_list.assign(used_list.size(), C64(0));
   #endif 
-  int index, n, i;
+  int n, i, j, index[NUM_ITERS];
   chromosome.collisions = 0;
 
   n = (1 << max_bits);
-  for (i = 0; i < n; i++)
+  for (i = 0; i < n; i+=NUM_ITERS)
   {
-    index = transform(block_list[i], chromosome.magic);
+    for (j = 0; j < NUM_ITERS; j++)
+      index[j] = transform(block_list[i+j], chromosome.magic);
 
-    if (used_list[index] == C64(0))
-    {
-      used_list[index] = attack_list[i];
-      continue;
-    }
-    chromosome.collisions += used_list[index] != attack_list[i];
+    for (j = 0; j < NUM_ITERS; j++)
+      if (used_list[index[j]] == C64(0))
+        used_list[index[j]] = attack_list[i+j];
+      else
+        chromosome.collisions += used_list[index[j]] != attack_list[i+j];
   }
 
   chromosome.fitness = n - chromosome.collisions;
@@ -541,9 +540,15 @@ int main(int argc, char **argv)
   Chromosome solution;
   InitializePopulation(pool);
 
-  printf("Generating magic for '%s' on square %c%d using %d <= (%d) <= %d bits\n", 
+  #if defined __AVX__
+  printf("[AVX] Generating magic for '%s' on square %c%d using %d <= (%d) <= %d bits\n", 
           is_bishop ? "bishop" : "rook", char(square%8+65),
           square/8+1, min_bits, target_bits, max_bits);
+  #else
+  printf("[SSE] Generating magic for '%s' on square %c%d using %d <= (%d) <= %d bits\n", 
+          is_bishop ? "bishop" : "rook", char(square%8+65),
+          square/8+1, min_bits, target_bits, max_bits);
+  #endif
 
   char cmd_line[256];
   for (int i = 0, j = 0; i < argc; i++)
